@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "gradio>=6.3.0",
     "motor>=3.7.1",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
