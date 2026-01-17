@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill -9)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(python -m src.user_profile_analyzer.web_ui:*)",
+      "Bash(python -m user_profile_analyzer.web_ui:*)",
+      "Bash(pip install:*)",
+      "Bash(/Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/.venv/bin/pip install:*)",
+      "Bash(/Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/.venv/bin/python:*)",
+      "Bash(PYTHONPATH=src /Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/.venv/bin/python:*)"
+    ]
+  }
+}

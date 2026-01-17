@@ -1,0 +1,62 @@
+2026-01-15 18:44:19,309 - __main__ - INFO - ============================================================
+2026-01-15 18:44:19,309 - __main__ - INFO - 启动用户画像分析系统 Web UI
+2026-01-15 18:44:19,309 - __main__ - INFO - ============================================================
+2026-01-15 18:44:19,313 - __main__ - INFO - 加载环境配置文件: .env.local
+2026-01-15 18:44:19,313 - __main__ - INFO - 连接MongoDB数据库: opencreator
+2026-01-15 18:44:19,350 - __main__ - INFO - MongoDB连接成功
+2026-01-15 18:44:23,981 - __main__ - INFO - Gradio UI 创建成功
+2026-01-15 18:44:23,981 - __main__ - INFO - 启动服务器 - 地址: 0.0.0.0:7860
+2026-01-15 18:44:24,125 - httpx - INFO - HTTP Request: GET http://localhost:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-01-15 18:44:24,134 - httpx - INFO - HTTP Request: HEAD http://localhost:7860/ "HTTP/1.1 200 OK"
+2026-01-15 18:44:24,206 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-01-15 18:44:25,887 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-01-15 18:44:26,885 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-01-15 18:46:43,778 - __main__ - INFO - 渲染用户列表 - 页码: 1
+2026-01-15 18:46:43,779 - __main__ - INFO - 获取用户列表预览 - 页码: 1, 每页: 10
+2026-01-15 18:46:46,263 - __main__ - INFO - 获取用户列表预览 - 页码: 1, 每页: 10
+2026-01-15 18:46:53,369 - __main__ - INFO - 成功获取 10 个用户数据
+2026-01-15 18:46:53,369 - __main__ - INFO - 用户列表下一页: 1 -> 2
+2026-01-15 18:46:53,369 - __main__ - INFO - 渲染用户列表 - 页码: 2
+2026-01-15 18:46:53,369 - __main__ - INFO - 获取用户列表预览 - 页码: 2, 每页: 10
+2026-01-15 18:46:55,143 - __main__ - INFO - 成功获取 5 个用户数据
+2026-01-15 18:46:55,144 - __main__ - INFO - 成功渲染 5 个用户卡片
+2026-01-15 18:46:55,498 - __main__ - INFO - 成功获取 10 个用户数据
+2026-01-15 18:46:55,499 - __main__ - INFO - 成功渲染 10 个用户卡片
+2026-01-15 18:46:59,600 - __main__ - WARNING - get_user_inputs: 未提供邮箱
+2026-01-15 18:46:59,601 - __main__ - INFO - 详情下一页: 邮箱=, 1 -> 1
+2026-01-15 20:48:23,267 - __main__ - INFO - ============================================================
+2026-01-15 20:48:23,267 - __main__ - INFO - 启动用户画像分析系统 Web UI
+2026-01-15 20:48:23,267 - __main__ - INFO - ============================================================
+2026-01-15 20:48:23,271 - __main__ - INFO - 加载环境配置文件: .env.local
+2026-01-15 20:48:23,271 - __main__ - INFO - 连接MongoDB数据库: opencreator
+2026-01-15 20:48:23,311 - __main__ - INFO - MongoDB连接成功
+2026-01-15 20:48:29,521 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-01-15 20:48:29,830 - __main__ - INFO - Gradio UI 创建成功
+2026-01-15 20:48:29,830 - __main__ - INFO - 启动服务器 - 地址: 0.0.0.0:7860
+2026-01-15 20:48:29,943 - httpx - INFO - HTTP Request: GET http://localhost:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-01-15 20:48:29,953 - httpx - INFO - HTTP Request: HEAD http://localhost:7860/ "HTTP/1.1 200 OK"
+2026-01-15 20:48:30,427 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-01-15 20:48:30,871 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-01-15 20:58:04,925 - __main__ - INFO - 渲染用户列表 - 页码: 1
+2026-01-15 20:58:04,925 - __main__ - INFO - 获取用户列表预览 - 页码: 1, 每页: 10
+2026-01-15 20:58:15,565 - __main__ - INFO - 加载用户详情: 
+2026-01-15 20:58:30,329 - __main__ - INFO - 成功获取 10 个用户数据
+2026-01-15 20:58:30,330 - __main__ - INFO - 成功渲染 10 个用户卡片
+2026-01-15 20:58:35,024 - __main__ - WARNING - get_user_inputs: 未提供邮箱
+2026-01-15 20:58:35,024 - __main__ - INFO - 详情下一页: 邮箱=, 1 -> 1
+2026-01-15 20:58:37,607 - __main__ - WARNING - get_user_inputs: 未提供邮箱
+2026-01-15 20:58:37,608 - __main__ - INFO - 详情下一页: 邮箱=, 1 -> 1
+2026-01-15 20:58:39,147 - __main__ - WARNING - get_user_inputs: 未提供邮箱
+2026-01-15 20:58:39,147 - __main__ - INFO - 详情下一页: 邮箱=, 1 -> 1
+2026-01-15 20:58:39,301 - __main__ - WARNING - get_user_inputs: 未提供邮箱
+2026-01-15 20:58:39,301 - __main__ - INFO - 详情下一页: 邮箱=, 1 -> 1
+2026-01-15 20:58:39,453 - __main__ - WARNING - get_user_inputs: 未提供邮箱
+2026-01-15 20:58:39,453 - __main__ - INFO - 详情下一页: 邮箱=, 1 -> 1
+2026-01-15 20:59:05,243 - __main__ - INFO - 渲染用户列表 - 页码: 1
+2026-01-15 20:59:05,243 - __main__ - INFO - 获取用户列表预览 - 页码: 1, 每页: 10
+2026-01-15 20:59:44,171 - __main__ - INFO - 成功获取 10 个用户数据
+2026-01-15 20:59:44,173 - __main__ - INFO - 成功渲染 10 个用户卡片
+2026-01-16 12:18:32,572 - __main__ - INFO - 渲染用户列表 - 页码: 1
+2026-01-16 12:18:32,573 - __main__ - INFO - 获取用户列表预览 - 页码: 1, 每页: 10
+2026-01-16 12:18:37,985 - __main__ - INFO - 成功获取 10 个用户数据
+2026-01-16 12:18:37,986 - __main__ - INFO - 成功渲染 10 个用户卡片
