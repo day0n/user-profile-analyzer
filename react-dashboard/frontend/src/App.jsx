@@ -123,6 +123,13 @@ const App = () => {
       key: 'stage',
     },
     {
+      title: 'Total Runs (30d)',
+      dataIndex: ['stats', 'total_runs_30d'],
+      key: 'stats.total_runs_30d',
+      sorter: true,
+      render: (val) => val || 0
+    },
+    {
       title: 'Active Days (30d)',
       dataIndex: ['stats', 'active_days_30d'],
       key: 'stats.active_days_30d',
