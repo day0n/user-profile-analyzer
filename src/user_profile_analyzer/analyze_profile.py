@@ -320,8 +320,8 @@ class AIProfileAnalyzer:
                             images.append(value)
 
         return {
-            "images": images[:5],  # 限制每个工作流最多5张图片
-            "videos": videos[:2],  # 限制每个工作流最多2个视频
+            "images": images[:20],  # 限制每个工作流最多20张图片
+            "videos": videos[:10],  # 限制每个工作流最多10个视频
             "texts": texts
         }
 
@@ -406,7 +406,7 @@ class AIProfileAnalyzer:
             # 下载并添加图片
             if image_urls:
                 print(f"      下载 {len(image_urls)} 张图片...")
-                download_tasks = [self._download_image(url) for url in image_urls[:10]]
+                download_tasks = [self._download_image(url) for url in image_urls[:200]]
                 images = await asyncio.gather(*download_tasks)
 
                 for img_data in images:
@@ -429,7 +429,7 @@ class AIProfileAnalyzer:
                 contents,
                 generation_config=genai.types.GenerationConfig(
                     temperature=0.3,
-                    max_output_tokens=2000,
+                    max_output_tokens=64000,
                 ),
                 safety_settings={
                     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -517,8 +517,8 @@ class AIProfileAnalyzer:
                 # 调用 Gemini API
                 result = await self._call_gemini_with_media(
                     prompt,
-                    all_images[:15],  # 限制总图片数
-                    all_videos[:5]    # 限制总视频数
+                    all_images[:200],  # 限制总图片数
+                    all_videos[:100]   # 限制总视频数
                 )
 
                 if not result:
