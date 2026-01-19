@@ -36,7 +36,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.server_api import ServerApi
-from tqdm.asyncio import tqdm
+from tqdm import tqdm
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
@@ -56,7 +56,7 @@ def load_env():
 
 
 # Prompt 模板
-ANALYSIS_PROMPT = """你是一个用户行为分析专家。请分析以下用户在AI创作平台上运行的工作流，判断每个工作流的目的，并生成用户画像。
+ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于识别潜在的商业客户。请分析以下用户在AI创作平台上运行的工作流，判断每个工作流的目的，并评估用户的商业价值潜力和精准定位。
 
 ## 用户基本信息
 - 30天运行次数：{total_runs_30d}
@@ -91,7 +91,16 @@ ANALYSIS_PROMPT = """你是一个用户行为分析专家。请分析以下用�
    - AI 探索学习（尝试新功能）
    - 其他（请说明）
 
-2. **综合分析用户画像**：基于所有工作流的目的分布，判断用户的整体画像
+2. **精准用户定位**：根据工作流内容、输入文本、图片素材等信息，尽可能精准判断：
+   - 用户所属行业（从图片内容、文案关键词推断）
+   - 用户的业务规模（从使用频率、内容复杂度推断）
+   - 用户主要发布的平台（从内容格式、风格推断）
+   - 用户制作的内容类型
+
+3. **评估商业价值潜力**：重点识别有商业需求但可能未被充分激活的用户
+   - 评估用户当前阶段（尝试期、成长期、成熟期、流失期）
+   - 分析可能阻碍用户继续使用的因素
+   - 给出针对性的运营建议
 
 ## 输出格式（JSON）
 {{
@@ -108,11 +117,35 @@ ANALYSIS_PROMPT = """你是一个用户行为分析专家。请分析以下用�
     "user_type": "用户类型标签（如：电商卖家/内容创作者/营销人员/个人玩家）",
     "activity_level": "高频活跃/中等活跃/轻度使用",
     "content_focus": ["内容偏好1", "内容偏好2"],
-    "skill_level": "新手/熟练/专业",
     "tags": ["标签1", "标签2", "标签3"],
     "summary": "一句话总结用户画像（30字内）"
+  }},
+  "positioning": {{
+    "industry": "具体行业（服装/美妆/食品/3C数码/家居/教育/游戏/汽车/房产/金融/医疗健康/旅游/餐饮/母婴/宠物/运动健身/无法判断）",
+    "business_scale": "业务规模（个人卖家/小型团队/中型企业/大型品牌/无法判断）",
+    "platform": "主要平台（抖音/快手/小红书/淘宝/拼多多/京东/跨境电商/微信视频号/B站/YouTube/无法判断）",
+    "content_type": "内容类型（商品展示图/商品展示视频/种草图文/品牌广告/短剧/口播视频/教程内容/娱乐内容/无法判断）"
+  }},
+  "business_potential": {{
+    "score": 8,
+    "stage": "尝试期/成长期/成熟期/流失期",
+    "barrier": "可能的阻碍因素（如：不熟悉操作、找不到合适模板、效果不满意、价格顾虑等）",
+    "recommendation": "运营建议（如：推荐行业模板、提供1对1指导、发送使用教程等）"
   }}
 }}
+
+## 商业潜力评分标准（score 1-10）
+- 9-10分：明确的商业需求（电商产品图/视频、品牌广告），使用频率低但有持续潜力
+- 7-8分：有商业倾向（营销内容、带货素材），处于尝试或成长期
+- 5-6分：可能有商业需求但不明确，需要进一步观察
+- 3-4分：偏向个人使用，商业价值较低
+- 1-2分：纯粹个人娱乐或测试，无商业价值
+
+## 定位判断指南
+- **行业判断**：从图片内容（产品类型）、文案关键词（品牌词、产品词）推断
+- **规模判断**：个人卖家（简单素材、低频使用）、小型团队（多样化内容、中频使用）、中大型企业（品牌化内容、高频批量）
+- **平台判断**：竖版视频（抖音/快手）、方形图文（小红书）、横版视频（B站/YouTube）、商品主图（电商平台）
+- **如果信息不足无法判断，填写"无法判断"，不要猜测**
 
 只输出JSON，不要其他内容。"""
 
@@ -165,16 +198,27 @@ class AIProfileAnalyzer:
         self.total_input_tokens = 0
         self.total_output_tokens = 0
 
-    async def get_users_to_analyze(self, specific_email: Optional[str] = None) -> List[Dict]:
-        """获取需要分析的用户列表"""
+    async def get_users_to_analyze(self, specific_email: Optional[str] = None, force: bool = False) -> List[Dict]:
+        """获取需要分析的用户列表
+
+        Args:
+            specific_email: 只分析指定邮箱的用户
+            force: 强制重新分析所有用户（包括已有画像的）
+        """
         if specific_email:
             # 只处理指定用户
             cursor = self.profile_collection.find(
                 {"user_email": specific_email},
                 {"user_id": 1, "user_email": 1, "stats": 1, "top_workflows": 1}
             )
+        elif force:
+            # 强制模式：获取所有用户
+            cursor = self.profile_collection.find(
+                {},
+                {"user_id": 1, "user_email": 1, "stats": 1, "top_workflows": 1}
+            )
         else:
-            # 获取所有 ai_profile 为 null 的用户
+            # 默认模式：只获取 ai_profile 为 null 的用户
             cursor = self.profile_collection.find(
                 {"ai_profile": None},
                 {"user_id": 1, "user_email": 1, "stats": 1, "top_workflows": 1}
@@ -195,7 +239,7 @@ class AIProfileAnalyzer:
             {
                 "user_id": user_id,
                 "created_at": {"$gte": cutoff_date},
-                "status": "FINISHED"
+                "status": "success"
             },
             {
                 "nodes": 1,
@@ -244,25 +288,36 @@ class AIProfileAnalyzer:
             # 合并 data 和 inputs
             all_data = {**data, **inputs}
 
+            # 提取图片 - 检查 imageBase64 字段（实际存的是 URL）
+            img_url = all_data.get("imageBase64", "")
+            if img_url and isinstance(img_url, str) and img_url.startswith("http"):
+                images.append(img_url)
+
+            # 提取视频 URL
+            video_url = all_data.get("videoUrl", "") or all_data.get("video_url", "") or all_data.get("videoBase64", "")
+            if video_url and isinstance(video_url, str) and video_url.startswith("http"):
+                videos.append(video_url)
+
+            # 提取文本输入
+            input_text = all_data.get("inputText", "") or all_data.get("text", "") or all_data.get("prompt", "")
+            if input_text and isinstance(input_text, str) and len(input_text) > 5:
+                texts.append(input_text)
+
+            # 遍历其他字段查找可能的媒体 URL
             for key, value in all_data.items():
-                if isinstance(value, str):
+                if isinstance(value, str) and value.startswith("http"):
                     # 检测图片 URL
                     if any(ext in value.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
-                        if value.startswith('http'):
+                        if value not in images:
                             images.append(value)
                     # 检测视频 URL
                     elif any(ext in value.lower() for ext in ['.mp4', '.mov', '.avi', '.webm']):
-                        if value.startswith('http'):
+                        if value not in videos:
                             videos.append(value)
-                    # 检测文本输入
-                    elif key in ['inputText', 'text', 'prompt', 'content'] and len(value) > 5:
-                        texts.append(value)
-                    # 检测 S3/CloudFront URL
-                    elif 's3.amazonaws.com' in value or 'cloudfront' in value.lower():
-                        if any(ext in value.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                    # CloudFront 图片资源
+                    elif 'resource.opencreator.io/images' in value:
+                        if value not in images:
                             images.append(value)
-                        elif any(ext in value.lower() for ext in ['.mp4', '.mov', '.avi', '.webm']):
-                            videos.append(value)
 
         return {
             "images": images[:5],  # 限制每个工作流最多5张图片
@@ -473,6 +528,8 @@ class AIProfileAnalyzer:
                 # 保存结果
                 ai_profile = {
                     **result.get("user_profile", {}),
+                    "positioning": result.get("positioning", {}),
+                    "business_potential": result.get("business_potential", {}),
                     "workflow_analysis": result.get("workflow_analysis", []),
                     "analyzed_at": datetime.now(),
                     "model": "gemini-2.0-flash"
@@ -493,17 +550,24 @@ class AIProfileAnalyzer:
                 print(f"  错误: {e}")
                 return f"error: {e}"
 
-    async def run(self, specific_email: Optional[str] = None):
-        """运行主流程"""
+    async def run(self, specific_email: Optional[str] = None, force: bool = False):
+        """运行主流程
+
+        Args:
+            specific_email: 只分析指定邮箱的用户
+            force: 强制重新分析所有用户（覆盖已有画像）
+        """
         print("=" * 60)
         print("AI 用户画像分析器")
         print(f"并发数: {self.concurrency}")
         print(f"Top 工作流数: {self.top_n}")
+        if force:
+            print("模式: 强制重新分析所有用户")
         print("=" * 60)
 
         # 1. 获取待分析用户
         print(f"\n[1/3] 获取待分析用户...")
-        users = await self.get_users_to_analyze(specific_email)
+        users = await self.get_users_to_analyze(specific_email, force=force)
         total_users = len(users)
         print(f"      找到 {total_users} 个用户待分析")
 
@@ -517,9 +581,21 @@ class AIProfileAnalyzer:
         tasks = [self.analyze_user(user) for user in users]
 
         results = []
-        for coro in tqdm.as_completed(tasks, total=len(tasks), desc="分析进度"):
+        pbar = tqdm(total=len(tasks), desc="分析进度")
+
+        for coro in asyncio.as_completed(tasks):
             result = await coro
             results.append(result)
+
+            # 更新进度条，显示实时 token 统计
+            pbar.set_postfix({
+                'input_tokens': f'{self.total_input_tokens:,}',
+                'output_tokens': f'{self.total_output_tokens:,}',
+                'cost': f'${(self.total_input_tokens * 0.10 + self.total_output_tokens * 0.40) / 1_000_000:.4f}'
+            })
+            pbar.update(1)
+
+        pbar.close()
 
         # 统计结果
         for result in results:
@@ -567,6 +643,11 @@ async def main():
         default=None,
         help="只分析指定邮箱的用户"
     )
+    parser.add_argument(
+        "--force", "-f",
+        action="store_true",
+        help="强制重新分析所有用户（覆盖已有画像）"
+    )
     args = parser.parse_args()
 
     # 加载环境变量
@@ -575,7 +656,7 @@ async def main():
 
     analyzer = AIProfileAnalyzer(concurrency=args.concurrency)
     try:
-        await analyzer.run(specific_email=args.email)
+        await analyzer.run(specific_email=args.email, force=args.force)
     finally:
         await analyzer.close()
 

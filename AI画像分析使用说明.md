@@ -26,6 +26,33 @@ uv sync
 
 ## 运行方式
 
+### 基本用法
+
+```bash
+# 默认：只分析未处理的用户（ai_profile 为 null）
+uv run python -m src.user_profile_analyzer.analyze_profile
+
+# 强制重新分析所有用户（覆盖已有画像）
+uv run python -m src.user_profile_analyzer.analyze_profile --force
+
+# 只分析指定用户
+uv run python -m src.user_profile_analyzer.analyze_profile --email user@example.com
+
+# 调整并发数（默认 5）
+uv run python -m src.user_profile_analyzer.analyze_profile -c 10
+
+# 组合使用：强制重新分析 + 高并发
+uv run python -m src.user_profile_analyzer.analyze_profile --force -c 10
+```
+
+### 命令行参数
+
+| 参数 | 简写 | 说明 | 默认值 |
+|------|------|------|--------|
+| `--force` | `-f` | 强制重新分析所有用户（覆盖已有画像） | 否 |
+| `--email` | `-e` | 只分析指定邮箱的用户 | 无 |
+| `--concurrency` | `-c` | 并发数 | 5 |
+
 ### 服务器运行（生产环境）
 
 ```bash
@@ -44,21 +71,22 @@ uv sync
 # 运行分析（使用 .env.local 配置）
 uv run python -m src.user_profile_analyzer.analyze_profile
 
+# 强制重新分析所有用户
+uv run python -m src.user_profile_analyzer.analyze_profile --force
+
 # 后台运行（推荐，防止 SSH 断开中断）
-nohup uv run python -m src.user_profile_analyzer.analyze_profile > analyze.log 2>&1 &
+nohup uv run python -m src.user_profile_analyzer.analyze_profile --force > analyze.log 2>&1 &
 
 # 查看运行日志
 tail -f analyze.log
 ```
 
-### 可选参数
+## 进度显示
 
-```bash
-# 调整并发数（默认 5，可提高到 10-20 加快速度）
-uv run python -m src.user_profile_analyzer.analyze_profile -c 10
+运行时会显示实时进度和 Token 统计：
 
-# 只分析指定用户
-uv run python -m src.user_profile_analyzer.analyze_profile --email user@example.com
+```
+分析进度:  50%|█████     | 800/1579 [05:30<05:20] input_tokens=12,456,000, output_tokens=3,200,000, cost=$2.5234
 ```
 
 ## 数据说明
@@ -68,7 +96,8 @@ uv run python -m src.user_profile_analyzer.analyze_profile --email user@example.
 从 `user_workflow_profile` 集合读取用户的 Top 10 工作流数据：
 - 工作流名称、签名、运行次数
 - 节点类型组合
-- 用户输入的图片/视频/文本
+- 用户输入的图片（`data.imageBase64` 字段，实际存储 URL）
+- 用户输入的文本（`data.inputText` 字段）
 
 ### 输出数据
 
@@ -99,24 +128,61 @@ uv run python -m src.user_profile_analyzer.analyze_profile --email user@example.
 ## 成本估算
 
 使用 Gemini 2.0 Flash 模型：
-- 输入价格：$0.10 / 1M tokens
-- 输出价格：$0.40 / 1M tokens
+
+| 项目 | 价格 |
+|------|------|
+| 输入 | $0.10 / 1M tokens |
+| 输出 | $0.40 / 1M tokens |
+| 图片 | ~258-1000 tokens/张 |
+
+### Token 计算规则
+
+- **文本**：约 4 字符 = 1 token
+- **图片**：≤384×384 像素 = 258 tokens，更大图片按 768×768 分块
+- **视频**：约 258 tokens/秒
+
+### 预估成本
 
 | 用户数 | 预计输入 tokens | 预计输出 tokens | 预计成本 |
 |--------|----------------|----------------|----------|
 | 15 | 12K | 6K | $0.004 |
-| 1,500 | 1.2M | 600K | $0.4 |
+| 1,500 | 25M | 5M | $4.5 |
 
 ## 注意事项
 
-1. **首次运行**：会分析所有 `ai_profile` 为 null 的用户
-2. **重复运行**：只会分析新增的未分析用户
-3. **重新分析**：如需重新分析某用户，需先将其 `ai_profile` 设为 null
-4. **并发控制**：默认并发数为 5，避免 API 限流
-5. **网络要求**：需要能访问 Gemini API 和 S3 图片资源
+1. **默认行为**：只分析 `ai_profile` 为 null 的用户，不会重复分析
+2. **强制模式**：使用 `--force` 会覆盖所有已有画像，重新分析
+3. **并发控制**：默认并发数为 5，避免 API 限流，可适当提高到 10-20
+4. **网络要求**：需要能访问 Gemini API 和 CloudFront 图片资源
+5. **图片限制**：每个用户最多分析 15 张图片，每个工作流最多 5 张
 
 ## 相关文件
 
-- `src/user_profile_analyzer/analyze_profile.py` - AI 画像分析主脚本
-- `src/user_profile_analyzer/generate_profile.py` - 用户画像数据生成脚本
-- `src/user_profile_analyzer/web_ui.py` - Web UI 数据展示
+| 文件 | 说明 |
+|------|------|
+| `src/user_profile_analyzer/analyze_profile.py` | AI 画像分析主脚本 |
+| `src/user_profile_analyzer/generate_profile.py` | 用户画像数据生成脚本 |
+| `src/user_profile_analyzer/web_ui.py` | Web UI 数据展示 |
+
+## 常见问题
+
+### Q: 如何只重新分析部分用户？
+
+```bash
+# 方法1：指定邮箱
+uv run python -m src.user_profile_analyzer.analyze_profile --email user@example.com
+
+# 方法2：手动清空指定用户的 ai_profile 后重新运行
+```
+
+### Q: 运行中断了怎么办？
+
+直接重新运行即可，已分析的用户会被跳过（除非使用 `--force`）。
+
+### Q: 如何查看分析结果？
+
+```bash
+# 启动 Web UI
+uv run python -m src.user_profile_analyzer.web_ui
+# 访问 http://localhost:7860
+```

@@ -14,7 +14,8 @@
       "Bash(ssh:*)",
       "Bash(tree:*)",
       "WebSearch",
-      "WebFetch(domain:ai.google.dev)"
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(uv run python:*)"
     ]
   }
 }
