@@ -10,7 +10,11 @@
       "Bash(pip install:*)",
       "Bash(/Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/.venv/bin/pip install:*)",
       "Bash(/Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/.venv/bin/python:*)",
-      "Bash(PYTHONPATH=src /Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/.venv/bin/python:*)"
+      "Bash(PYTHONPATH=src /Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/.venv/bin/python:*)",
+      "Bash(ssh:*)",
+      "Bash(tree:*)",
+      "WebSearch",
+      "WebFetch(domain:ai.google.dev)"
     ]
   }
 }
