@@ -52,19 +52,6 @@ def load_env():
     env_path = Path(__file__).resolve().parent.parent.parent / env_file
     load_dotenv(env_path)
 
-    # Gemini API Key 优先从 .env.prod 读取（本地 key 可能无效）
-    current_key = os.getenv("GOOGLE_GENAI_API_KEY", "")
-    if not current_key.startswith("AIza"):
-        prod_env_path = Path(__file__).resolve().parent.parent.parent / ".env.prod"
-        if prod_env_path.exists():
-            load_dotenv(prod_env_path, override=False)
-            # 只覆盖 API key
-            from dotenv import dotenv_values
-            prod_values = dotenv_values(prod_env_path)
-            if prod_values.get("GOOGLE_GENAI_API_KEY", "").startswith("AIza"):
-                os.environ["GOOGLE_GENAI_API_KEY"] = prod_values["GOOGLE_GENAI_API_KEY"]
-                print(f"使用 .env.prod 的 Gemini API Key")
-
     return env_file
 
 
