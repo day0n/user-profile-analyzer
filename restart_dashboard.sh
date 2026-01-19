@@ -1,16 +1,15 @@
 #!/bin/bash
 
-# Configuration - Change ports here
+# Configuration
 BACKEND_PORT=8000
 FRONTEND_PORT=5173
 
-# Check if running with bash
+# Check for Bash
 if [ -z "$BASH_VERSION" ]; then
-    echo "This script requires Bash. Please run with: ./restart_dashboard.sh or bash restart_dashboard.sh"
+    echo "This script requires Bash. Please run with: bash restart_dashboard.sh"
     exit 1
 fi
 
-# Function to kill process on a specific port
 kill_port() {
     local port=$1
     local pid=$(lsof -ti :$port)
@@ -22,62 +21,44 @@ kill_port() {
     fi
 }
 
-# Function to cleanup on exit
-cleanup() {
-    echo "Stopping servers..."
-    if [ -n "$BACKEND_PID" ]; then kill $BACKEND_PID 2>/dev/null; fi
-    if [ -n "$FRONTEND_PID" ]; then kill $FRONTEND_PID 2>/dev/null; fi
-    exit
-}
-
-# Trap INT and TERM signals
-trap cleanup INT TERM
-
-echo "=== Restarting Dashboard ==="
+echo "=== Restarting Dashboard (Background Mode) ==="
 
 # Check for clean install flag
 if [ "$1" == "--clean" ]; then
     echo "🧹 Clean install mode detected."
-    echo "Removing existing node_modules (fixes cross-platform copy issues)..."
     rm -rf react-dashboard/frontend/node_modules
     rm -f react-dashboard/frontend/package-lock.json
 fi
 
-# 1. Kill existing processes
-echo "[1/4] Cleaning up ports..."
+# 1. Kill existing
 kill_port $BACKEND_PORT
 kill_port $FRONTEND_PORT
 
 # 2. Start Backend
-echo "[2/4] Starting Backend on port $BACKEND_PORT..."
+echo "Starting Backend (nohup)..."
 cd react-dashboard/backend
 if command -v uv &> /dev/null; then
-    uv run uvicorn main:app --reload --port $BACKEND_PORT &
+    nohup uv run uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > ../../backend.log 2>&1 &
 else
-    # Fallback to python/pip if uv not found (common on servers)
-    python3 -m uvicorn main:app --reload --port $BACKEND_PORT &
+    nohup python3 -m uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > ../../backend.log 2>&1 &
 fi
-BACKEND_PID=$!
 cd ../..
 
 # 3. Start Frontend
-echo "[3/4] Starting Frontend on port $FRONTEND_PORT..."
+echo "Starting Frontend (nohup)..."
 cd react-dashboard/frontend
-
-# Ensure node_modules exists
 if [ ! -d "node_modules" ]; then
-    echo "Installing frontend dependencies..."
+    echo "Installing dependencies..."
     npm install
 fi
 
-# Start Vite
-npm run dev -- --port $FRONTEND_PORT &
-FRONTEND_PID=$!
+nohup npm run dev -- --host --port $FRONTEND_PORT > ../../frontend.log 2>&1 &
 cd ../..
 
-echo "[4/4] Dashboard started!"
-echo "Backend: http://localhost:$BACKEND_PORT"
-echo "Frontend: http://localhost:$FRONTEND_PORT"
-echo "Press Ctrl+C to stop both."
-
-wait
+echo "=================================================="
+echo "✅ Dashboard started in BACKGROUND."
+echo "Backend Port: $BACKEND_PORT"
+echo "Frontend Port: $FRONTEND_PORT"
+echo "Logs are being written to: backend.log and frontend.log"
+echo "You can close this terminal now."
+echo "=================================================="
