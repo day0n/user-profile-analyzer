@@ -183,7 +183,7 @@ class AIProfileAnalyzer:
             raise ValueError("请确保环境变量中配置了 GOOGLE_GENAI_API_KEY")
 
         genai.configure(api_key=gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        self.model = genai.GenerativeModel('gemini-3-flash-preview')
 
         # 配置
         self.days_range = 30
@@ -532,7 +532,7 @@ class AIProfileAnalyzer:
                     "business_potential": result.get("business_potential", {}),
                     "workflow_analysis": result.get("workflow_analysis", []),
                     "analyzed_at": datetime.now(),
-                    "model": "gemini-2.0-flash"
+                    "model": "gemini-3-flash-preview"
                 }
 
                 await self.profile_collection.update_one(
@@ -591,7 +591,7 @@ class AIProfileAnalyzer:
             pbar.set_postfix({
                 'input_tokens': f'{self.total_input_tokens:,}',
                 'output_tokens': f'{self.total_output_tokens:,}',
-                'cost': f'${(self.total_input_tokens * 0.10 + self.total_output_tokens * 0.40) / 1_000_000:.4f}'
+                'cost': f'${(self.total_input_tokens * 0.50 + self.total_output_tokens * 3.00) / 1_000_000:.4f}'
             })
             pbar.update(1)
 
@@ -617,9 +617,9 @@ class AIProfileAnalyzer:
         print(f"  输入 tokens: {self.total_input_tokens:,}")
         print(f"  输出 tokens: {self.total_output_tokens:,}")
 
-        # 估算成本 (Gemini 2.0 Flash: $0.10/M input, $0.40/M output)
-        input_cost = self.total_input_tokens * 0.10 / 1_000_000
-        output_cost = self.total_output_tokens * 0.40 / 1_000_000
+        # 估算成本 (Gemini 3 Flash: $0.50/M input, $3.00/M output)
+        input_cost = self.total_input_tokens * 0.50 / 1_000_000
+        output_cost = self.total_output_tokens * 3.00 / 1_000_000
         print(f"  估算成本: ${input_cost + output_cost:.4f}")
         print("=" * 60)
 
