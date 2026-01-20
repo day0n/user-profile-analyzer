@@ -149,7 +149,45 @@ async def list_users(
     for u in users: u["_id"] = str(u["_id"])
     return {"total": total, "page": page, "limit": limit, "items": users}
 
-# ... (get_user and get_stats remain unchanged)
+@app.get("/api/users/{user_id}", response_model=UserProfile)
+async def get_user(user_id: str):
+    user = await collection.find_one({"user_id": user_id})
+    if not user: raise HTTPException(404, "User not found")
+    user["_id"] = str(user["_id"])
+    return user
+
+@app.get("/api/stats")
+async def get_stats():
+    pipeline_industry = [
+        {"$match": {"ai_profile.positioning.industry": {"$ne": "无法判断"}}},
+        {"$group": {"_id": "$ai_profile.positioning.industry", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    pipeline_stage = [
+        {"$match": {"ai_profile.business_potential.stage": {"$ne": "无法判断"}}},
+        {"$group": {"_id": "$ai_profile.business_potential.stage", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    pipeline_category = [
+        {"$match": {"ai_profile.user_category": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": "$ai_profile.user_category", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    
+    industries = await collection.aggregate(pipeline_industry).to_list(None)
+    stages = await collection.aggregate(pipeline_stage).to_list(None)
+    categories = await collection.aggregate(pipeline_category).to_list(None)
+    
+    high_potential = await collection.count_documents({"ai_profile.business_potential.score": {"$gte": 7}})
+    total_users = await collection.count_documents({})
+    
+    return {
+        "industries": {i["_id"]: i["count"] for i in industries if i["_id"]},
+        "stages": {i["_id"]: i["count"] for i in stages if i["_id"]},
+        "categories": {i["_id"]: i["count"] for i in categories if i["_id"]},
+        "high_potential_count": high_potential,
+        "total_users": total_users
+    }
 
 @app.get("/api/filters")
 async def get_filters():

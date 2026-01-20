@@ -11,3 +11,16 @@ INFO:     127.0.0.1:51424 - "GET /api/stats HTTP/1.1" 404 Not Found
 INFO:     127.0.0.1:51427 - "GET /api/stats HTTP/1.1" 404 Not Found
 INFO:     127.0.0.1:51434 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:51428 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51433 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51425 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51507 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51426 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51482 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [82962]
+INFO:     Started server process [83405]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
