@@ -13,3 +13,7 @@ wheels/
 .env.local
 .env.prod
 .env.dev
+
+# Log files
+backend.log
+frontend.log
