@@ -163,6 +163,12 @@ const App = () => {
               <Slider min={1} max={10} marks={{ 1: '1', 5: '5', 10: '10' }} />
             </Form.Item>
 
+            <Form.Item label={<span style={{ color: 'white' }}>User Category</span>} name="category">
+              <Select allowClear placeholder="Select Category">
+                {filterOptions.categories?.map(c => <Option key={c} value={c}>{c}</Option>)}
+              </Select>
+            </Form.Item>
+
             <Form.Item label={<span style={{ color: 'white' }}>Industry</span>} name="industry">
               <Select allowClear placeholder="Select Industry">
                 {filterOptions.industries?.map(i => <Option key={i} value={i}>{i}</Option>)}
