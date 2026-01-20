@@ -31,10 +31,16 @@ fi
 kill_port $BACKEND_PORT
 kill_port $FRONTEND_PORT
 
-# 2. Start Backend (using .venv)
+# 2. Start Backend
 echo "Starting Backend..."
 cd "$SCRIPT_DIR/react-dashboard/backend"
-nohup "$SCRIPT_DIR/.venv/bin/uvicorn" main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$SCRIPT_DIR/backend.log" 2>&1 &
+
+if command -v uv &> /dev/null; then
+    nohup uv run uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$SCRIPT_DIR/backend.log" 2>&1 &
+else
+    echo "Warning: 'uv' not found, trying 'python3'..."
+    nohup python3 -m uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$SCRIPT_DIR/backend.log" 2>&1 &
+fi
 cd "$SCRIPT_DIR"
 
 # 3. Start Frontend

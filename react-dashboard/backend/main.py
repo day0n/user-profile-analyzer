@@ -70,7 +70,89 @@ class AiProfile(BaseModel):
     analyzed_at: Optional[datetime] = None
     model: Optional[str] = None
 
-# ... (Previous code)
+class UserStats(BaseModel):
+    total_runs_30d: Optional[int] = 0
+    active_days_30d: Optional[int] = 0
+
+class WorkflowNode(BaseModel):
+    rank: int
+    workflow_name: Optional[str] = None
+    signature: Optional[str] = None
+    run_count: int
+    node_types: List[str] = []
+    snapshot_url: Optional[str] = None
+
+class UserProfile(BaseModel):
+    id: str = Field(alias="_id")
+    user_id: str
+    user_email: Optional[str] = None
+    stats: Optional[UserStats] = None
+    ai_profile: Optional[AiProfile] = None
+    top_workflows: List[WorkflowNode] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        populate_by_name = True
+
+class PaginatedResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    items: List[UserProfile]
+
+@app.on_event("startup")
+async def startup_db_client():
+    try:
+        await client.admin.command('ping')
+        print("Connected to MongoDB!")
+    except Exception as e:
+        print(f"Connection failed: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()
+
+# --- Routes ---
+
+@app.get("/api/users", response_model=PaginatedResponse)
+async def list_users(
+    page: int = 1,
+    limit: int = 50,
+    industry: Optional[str] = None,
+    platform: Optional[str] = None,
+    stage: Optional[str] = None,
+    min_score: Optional[int] = Query(None),
+    sort_by: str = "business_potential.score",
+    sort_order: str = "desc"
+):
+    query = {}
+    if industry: query["ai_profile.positioning.industry"] = industry
+    if platform: query["ai_profile.positioning.platform"] = platform
+    if stage: query["ai_profile.business_potential.stage"] = stage
+    if min_score is not None: query["ai_profile.business_potential.score"] = {"$gte": min_score}
+
+    skip = (page - 1) * limit
+    
+    sort_field = "ai_profile.business_potential.score"
+    if sort_by == "stats.active_days_30d":
+        sort_field = "stats.active_days_30d"
+    
+    sort_dir = -1 if sort_order == "desc" else 1
+
+    total = await collection.count_documents(query)
+    cursor = collection.find(query).sort(sort_field, sort_dir).skip(skip).limit(limit)
+    users = await cursor.to_list(length=limit)
+    
+    for u in users: u["_id"] = str(u["_id"])
+    return {"total": total, "page": page, "limit": limit, "items": users}
+
+@app.get("/api/users/{user_id}", response_model=UserProfile)
+async def get_user(user_id: str):
+    user = await collection.find_one({"user_id": user_id})
+    if not user: raise HTTPException(404, "User not found")
+    user["_id"] = str(user["_id"])
+    return user
 
 @app.get("/api/stats")
 async def get_stats():
