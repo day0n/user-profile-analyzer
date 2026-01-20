@@ -52,5 +52,17 @@ echo "=================================================="
 echo "Dashboard started!"
 echo "Backend Port: $BACKEND_PORT"
 echo "Frontend Port: $FRONTEND_PORT"
-echo "Logs: backend.log, frontend.log"
+echo "=================================================="
+echo ""
+echo "Showing logs for 60 seconds (Ctrl+C to exit earlier)..."
+echo "--- Backend Log ---"
+echo ""
+
+# Show logs for 60 seconds
+timeout 60 tail -f "$SCRIPT_DIR/backend.log" "$SCRIPT_DIR/frontend.log" 2>/dev/null || true
+
+echo ""
+echo "=================================================="
+echo "Log preview finished. Services running in background."
+echo "To view logs later: tail -f backend.log frontend.log"
 echo "=================================================="
