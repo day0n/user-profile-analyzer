@@ -9,6 +9,7 @@ import {
   ReloadOutlined, RiseOutlined, RocketOutlined
 } from '@ant-design/icons';
 import { getUsers, getStats, getFilters, getUser } from './services/api';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -185,36 +186,88 @@ const App = () => {
         <Content style={{ padding: '24px', overflowY: 'auto' }}>
           {/* Dashboard Stats */}
           {stats && (
-            <Row gutter={16} style={{ marginBottom: '24px' }}>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Total Users"
-                    value={stats.total_users}
-                    prefix={<UserOutlined />}
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="High Potential (>7)"
-                    value={stats.high_potential_count}
-                    valueStyle={{ color: '#3f8600' }}
-                    prefix={<RiseOutlined />}
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Top Industry"
-                    value={stats.industries ? Object.keys(stats.industries)[0] : '-'}
-                    prefix={<RocketOutlined />}
-                  />
-                </Card>
-              </Col>
-            </Row>
+            <>
+              <Row gutter={16} style={{ marginBottom: '24px' }}>
+                <Col span={6}>
+                  <Card>
+                    <Statistic
+                      title="Total Users"
+                      value={stats.total_users}
+                      prefix={<UserOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card>
+                    <Statistic
+                      title="High Potential (>7)"
+                      value={stats.high_potential_count}
+                      valueStyle={{ color: '#3f8600' }}
+                      prefix={<RiseOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card>
+                    <Statistic
+                      title="Top Industry"
+                      value={stats.industries ? Object.keys(stats.industries)[0] : '-'}
+                      prefix={<RocketOutlined />}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+
+              {/* Analytical Charts */}
+              <Row gutter={16} style={{ marginBottom: '24px' }}>
+                <Col span={12}>
+                  <Card title="User Category Distribution" style={{ height: 350 }}>
+                    {stats.categories ? (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <PieChart>
+                          <Pie
+                            data={Object.entries(stats.categories).map(([name, value]) => ({ name, value }))}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            fill="#1890ff"
+                            paddingAngle={5}
+                            dataKey="value"
+                            label
+                          >
+                            {Object.entries(stats.categories).map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : <Text type="secondary">No category data yet.</Text>}
+                  </Card>
+                </Col>
+                <Col span={12}>
+                  <Card title="Top Industries" style={{ height: 350 }}>
+                    {stats.industries && (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart
+                          data={Object.entries(stats.industries).slice(0, 5).map(([name, value]) => ({ name, value }))}
+                          layout="vertical"
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" />
+                          <YAxis type="category" dataKey="name" width={100} />
+                          <Tooltip />
+                          <Bar dataKey="value" fill="#82ca9d" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </Card>
+                </Col>
+              </Row>
+            </>
           )}
 
           <Card title="User List" extra={<Button icon={<ReloadOutlined />} onClick={fetchUserData}>Refresh</Button>}>

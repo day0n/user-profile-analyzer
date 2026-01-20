@@ -1,0 +1,40 @@
+INFO:     Will watch for changes in these directories: ['/Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/react-dashboard/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [67751] using StatReload
+INFO:     Started server process [67757]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:55980 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56009 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56010 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56059 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56061 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55978 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55979 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56007 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55981 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56008 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56086 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56058 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56057 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56088 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56094 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56136 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56144 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56154 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56156 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56158 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56164 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56166 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57608 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57612 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57633 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57635 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57632 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57643 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57631 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57655 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57726 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57734 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57736 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57738 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 404 Not Found
