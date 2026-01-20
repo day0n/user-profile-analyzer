@@ -1,10 +1,13 @@
 INFO:     Will watch for changes in these directories: ['/Users/niuzj/Desktop/OpenCreator-ai/user-profile-analyzer/react-dashboard/backend']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [74446] using StatReload
-INFO:     Started server process [74451]
+INFO:     Started reloader process [79061] using StatReload
+INFO:     Started server process [79064]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 Connected to MongoDB!
-INFO:     127.0.0.1:59912 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59911 - "GET /api/filters HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59910 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64973 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64972 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65103 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64974 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65105 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65115 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK

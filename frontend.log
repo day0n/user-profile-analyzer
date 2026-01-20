@@ -3,17 +3,8 @@
 > vite --host --port 5173
 
 
-  VITE v5.4.21  ready in 444 ms
+  VITE v5.4.21  ready in 242 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.2:5173/
   ➜  Network: http://198.18.0.1:5173/
-8:06:10 PM [vite] http proxy error: /api/users?page=1&limit=10&min_score=1
-Error: connect ETIMEDOUT 127.0.0.1:8000
-    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-8:06:10 PM [vite] http proxy error: /api/filters
-Error: connect ETIMEDOUT 127.0.0.1:8000
-    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
-8:06:10 PM [vite] http proxy error: /api/stats
-Error: connect ETIMEDOUT 127.0.0.1:8000
-    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
