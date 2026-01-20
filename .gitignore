@@ -8,12 +8,29 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
+ENV/
 
 # Environment files (sensitive)
+.env
 .env.local
 .env.prod
 .env.dev
+*.env
 
 # Log files
 backend.log
 frontend.log
+*.log
+
+# Frontend (Node.js)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+
+# IDE / System
+.vscode/
+.idea/
+.DS_Store
