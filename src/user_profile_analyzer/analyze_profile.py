@@ -191,7 +191,7 @@ class AIProfileAnalyzer:
             raise ValueError("请确保环境变量中配置了 GOOGLE_GENAI_API_KEY")
 
         genai.configure(api_key=gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-3-pro-preview')
+        self.model = genai.GenerativeModel('gemini-3-flash-preview')
 
         # 配置
         self.days_range = 30
@@ -540,7 +540,7 @@ class AIProfileAnalyzer:
                     "business_potential": result.get("business_potential", {}),
                     "workflow_analysis": result.get("workflow_analysis", []),
                     "analyzed_at": datetime.now(),
-                    "model": "gemini-3-pro-preview"
+                    "model": "gemini-3-flash-preview"
                 }
 
                 await self.profile_collection.update_one(
