@@ -362,15 +362,7 @@ const App = () => {
                       />
                     </Card>
                   </Col>
-                  <Col span={6}>
-                    <Card hoverable>
-                      <Statistic
-                        title="Top Industry"
-                        value={stats.industries ? Object.keys(stats.industries)[0] : '-'}
-                        prefix={<RocketTwoTone twoToneColor="#eb2f96" />}
-                      />
-                    </Card>
-                  </Col>
+
                 </Row>
 
                 {/* Analytical Charts */}
