@@ -102,12 +102,12 @@ class PaymentStatsUpdater:
         profile_user_id = profile.get("user_id")
 
         try:
-            # 1. 通过 email 查找 user_id
-            user_id = await self.get_user_id_by_email(user_email)
+            # 1. 优先使用 profile 中的 user_id
+            user_id = profile_user_id
 
-            if not user_id:
-                # 如果通过 email 找不到，尝试使用 profile 中的 user_id
-                user_id = profile_user_id
+            # 2. 如果 profile 中没有，再通过 email 查找
+            if not user_id and user_email:
+                user_id = await self.get_user_id_by_email(user_email)
 
             if not user_id:
                 return "skip: no user_id"
