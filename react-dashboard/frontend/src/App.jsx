@@ -398,9 +398,9 @@ const App = () => {
                                   : Object.entries(stats.categories).map(([name, data]) => ({ name, value: data.count }))
                               }
                               cx="50%"
-                              cy="45%"
+                              cy="40%"
                               innerRadius={60}
-                              outerRadius={90}
+                              outerRadius={80}
                               fill="#1890ff"
                               paddingAngle={5}
                               dataKey="value"

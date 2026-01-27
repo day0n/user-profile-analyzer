@@ -36,6 +36,7 @@ app.add_middleware(
 client = AsyncIOMotorClient(MONGO_URI)
 db = client[MONGO_DB_NAME]
 collection = db["user_workflow_profile"]
+flow_task_collection = db["flow_task"]  # 新增：flow_task 集合
 
 # --- Models ---
 class WorkflowEdge(BaseModel):
@@ -146,6 +147,59 @@ class PaginatedResponse(BaseModel):
     limit: int
     items: List[UserProfile]
 
+class ActiveUsersResponse(BaseModel):
+    """时间段内有运行记录的用户ID列表"""
+    total: int
+    start_date: str
+    end_date: str
+    user_ids: List[str]
+
+# --- Helper for Time Filtering ---
+async def fetch_active_user_ids(start_date: Optional[str], end_date: Optional[str]) -> List[str]:
+    """
+    Query flow_task collection for user_ids active within the date range.
+    """
+    if not start_date and not end_date:
+        return []
+
+    try:
+        if start_date:
+            if 'T' in start_date:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            else:
+                start_dt = datetime.fromisoformat(f"{start_date}T00:00:00")
+        else:
+            start_dt = datetime.min # Should not happen based on logic, but safe fallback
+
+        if end_date:
+            if 'T' in end_date:
+                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            else:
+                end_dt = datetime.fromisoformat(f"{end_date}T23:59:59")
+        else:
+            end_dt = datetime.max
+            
+    except ValueError as e:
+        print(f"Date parse error: {e}")
+        return []
+
+    pipeline = [
+        {
+            "$match": {
+                "created_at": {
+                    "$gte": start_dt,
+                    "$lte": end_dt
+                }
+            }
+        },
+        {"$group": {"_id": "$user_id"}},
+        {"$project": {"_id": 0, "user_id": "$_id"}}
+    ]
+
+    cursor = flow_task_collection.aggregate(pipeline)
+    results = await cursor.to_list(length=None)
+    return [r["user_id"] for r in results if r.get("user_id")]
+
 # --- Routes ---
 
 @app.get("/api/users", response_model=PaginatedResponse)
@@ -169,15 +223,16 @@ async def list_users(
     if category: query["ai_profile.user_category"] = category
     if min_score is not None: query["ai_profile.business_potential.score"] = {"$gte": min_score}
 
-    # Time Filter
-    date_filter = {}
-    if start_date:
-        date_filter["$gte"] = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-    if end_date:
-        date_filter["$lte"] = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-    
-    if date_filter:
-        query["updated_at"] = date_filter
+    # Time Filter via flow_task (Business Time)
+    if start_date or end_date:
+        active_user_ids = await fetch_active_user_ids(start_date, end_date)
+        # Use $in query to filter users
+        if active_user_ids:
+             query["user_id"] = {"$in": active_user_ids}
+        else:
+             # If date range provided but no active users found, return empty result
+             # We can simulate this by matching a non-existent ID
+             query["user_id"] = "NO_MATCHING_USERS"
 
     skip = (page - 1) * limit
     
@@ -202,7 +257,6 @@ async def get_user(user_id: str):
     return user
 
 @app.get("/api/stats")
-@app.get("/api/stats")
 async def get_stats(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -212,14 +266,13 @@ async def get_stats(
     params_match = {}
     
     if start_date or end_date:
-        date_filter = {}
-        if start_date:
-            date_filter["$gte"] = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-        if end_date:
-            date_filter["$lte"] = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-        if date_filter:
-            params_match["updated_at"] = date_filter
-            
+        active_user_ids = await fetch_active_user_ids(start_date, end_date)
+        if active_user_ids:
+            params_match["user_id"] = {"$in": active_user_ids}
+        else:
+             # No users in range
+             params_match["user_id"] = "NO_MATCHING_USERS"
+
     # Apply global category filter to existing match
     if category:
         params_match["ai_profile.user_category"] = category
@@ -350,12 +403,33 @@ async def get_filters():
     platforms = await collection.distinct("ai_profile.positioning.platform")
     stages = await collection.distinct("ai_profile.business_potential.stage")
     categories = await collection.distinct("ai_profile.user_category")
-    
+
     return {
         "industries": sorted([x for x in industries if x]),
         "platforms": sorted([x for x in platforms if x]),
         "stages": sorted([x for x in stages if x]),
         "categories": sorted([x for x in categories if x])
+    }
+
+@app.get("/api/active-users", response_model=ActiveUsersResponse)
+async def get_active_users(
+    start_date: str = Query(..., description="开始日期，格式：YYYY-MM-DD 或 ISO 8601"),
+    end_date: str = Query(..., description="结束日期，格式：YYYY-MM-DD 或 ISO 8601")
+):
+    """
+    获取指定时间段内有运行记录的所有用户ID
+
+    - **start_date**: 开始日期（必填）
+    - **end_date**: 结束日期（必填）
+
+    返回该时间段内在 flow_task 表中有运行记录的所有用户 user_id 列表
+    """
+    user_ids = await fetch_active_user_ids(start_date, end_date)
+    return {
+        "total": len(user_ids),
+        "start_date": start_date,
+        "end_date": end_date,
+        "user_ids": user_ids
     }
 
 if __name__ == "__main__":
