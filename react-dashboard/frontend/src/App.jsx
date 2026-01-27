@@ -406,10 +406,12 @@ const App = () => {
                               dataKey="value"
                               label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                               onClick={(data) => {
+                                // Disable subcategory clicking as requested
+                                if (selectedCategory) return;
                                 onGlobalCategorySelect(data.name);
                                 setSelectedCategory(data.name);
                               }}
-                              style={{ cursor: 'pointer' }}
+                              style={{ cursor: selectedCategory ? 'default' : 'pointer' }}
                             >
                               {/* Custom Cells */}
                               {(selectedCategory && stats.categories[selectedCategory]
