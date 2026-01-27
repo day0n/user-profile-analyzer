@@ -775,37 +775,35 @@ class AIProfileAnalyzer:
                 all_videos = []
 
                 for i, workflow in enumerate(top_workflows, 1):
-                    flow_task_id = workflow.get("flow_task_id")
-                    signature = workflow.get("signature", "")
+                    # 直接使用 top_workflows 中保存的 topology 数据
+                    topology_data = workflow.get("topology")
 
-                    # 优先使用 flow_task_id 获取拓扑数据
-                    topology_data = None
-                    if flow_task_id:
-                        topology_data = await self.get_workflow_topology_data(flow_task_id)
+                    # 如果没有 topology 数据（旧数据），尝试通过 flow_task_id 查询
+                    if not topology_data:
+                        flow_task_id = workflow.get("flow_task_id")
+                        signature = workflow.get("signature", "")
 
-                    # 如果没有 flow_task_id 或查询失败，回退到签名匹配
-                    if not topology_data and signature:
-                        full_data = await self.get_workflow_full_data(user_id, signature)
-                        if full_data:
-                            # 转换为拓扑数据格式
-                            topology_data = {
-                                "nodes": full_data.get("nodes", []),
-                                "edges": full_data.get("edges", [])
-                            }
+                        if flow_task_id:
+                            topology_data = await self.get_workflow_topology_data(flow_task_id)
+
+                        # 如果还是没有，回退到签名匹配
+                        if not topology_data and signature:
+                            full_data = await self.get_workflow_full_data(user_id, signature)
+                            if full_data:
+                                topology_data = {
+                                    "nodes": full_data.get("nodes", []),
+                                    "edges": full_data.get("edges", [])
+                                }
 
                     # 格式化工作流信息
                     workflow_text = self._format_workflow_for_prompt(i, workflow, topology_data)
                     workflows_text_parts.append(workflow_text)
 
-                    # 收集媒体 URL（从原始节点数据中提取）
+                    # 收集媒体 URL（从拓扑数据中提取）
                     if topology_data:
-                        # 需要从原始数据提取媒体，因为拓扑数据可能已过滤
-                        if flow_task_id:
-                            raw_data = await self.get_workflow_full_data(user_id, signature)
-                            if raw_data:
-                                media = self._extract_media_urls(raw_data.get("nodes", []))
-                                all_images.extend(media["images"])
-                                all_videos.extend(media["videos"])
+                        media = self._extract_media_urls(topology_data.get("nodes", []))
+                        all_images.extend(media["images"])
+                        all_videos.extend(media["videos"])
 
                 # 构建完整 prompt
                 prompt = ANALYSIS_PROMPT.format(

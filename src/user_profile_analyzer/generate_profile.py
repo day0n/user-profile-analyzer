@@ -48,6 +48,9 @@ def load_env():
 class UserWorkflowProfileGenerator:
     """用户工作流画像生成器（并发版本）"""
 
+    # 输入型节点类型
+    INPUT_NODE_TYPES = ["textInput", "imageInput", "videoInput", "audioInput"]
+
     def __init__(self, concurrency: int = 400):
         """
         初始化生成器
@@ -111,6 +114,66 @@ class UserWorkflowProfileGenerator:
         if not nodes:
             return []
         return list(set(node.get("type", "unknown") for node in nodes))
+
+    def clean_node_data(self, node: Dict) -> Dict:
+        """
+        清理节点数据，用于保存到数据库
+
+        规则：
+        - 输入型节点保留完整 data，但剔除 results/model_options
+        - 非输入节点只保留关键字段（prompt/模型/语音/比例）
+        """
+        node_type = node.get("type", "unknown")
+        node_data = node.get("data", {})
+
+        cleaned_node = {
+            "id": node.get("id"),
+            "type": node_type,
+            "label": node_data.get("label"),
+            "isInputNode": node_type in self.INPUT_NODE_TYPES,
+        }
+
+        if node_type in self.INPUT_NODE_TYPES:
+            # 输入节点：保留全部 data，但剔除 results / model_options
+            cleaned_data = {
+                k: v for k, v in node_data.items()
+                if k not in ["results", "model_options"]
+            }
+            cleaned_node["data"] = cleaned_data
+        else:
+            # 非输入节点：只保留关键字段
+            cleaned_node["data"] = {
+                "prompt": node_data.get("inputText"),
+                "selectedModels": node_data.get("selectedModels"),
+                "selectedVoice": node_data.get("selectedVoice"),
+                "aspectRatio": node_data.get("aspectRatio"),
+            }
+
+        return cleaned_node
+
+    def clean_edge_data(self, edge: Dict) -> Dict:
+        """清理边数据"""
+        return {
+            "id": edge.get("id"),
+            "source": edge.get("source"),
+            "target": edge.get("target"),
+            "sourceHandle": edge.get("sourceHandle"),
+            "targetHandle": edge.get("targetHandle"),
+        }
+
+    def clean_workflow_topology(self, nodes: List[Dict], edges: List[Dict]) -> Dict:
+        """
+        清理工作流拓扑数据，用于保存到数据库
+
+        返回清理后的 nodes 和 edges
+        """
+        cleaned_nodes = [self.clean_node_data(node) for node in (nodes or [])]
+        cleaned_edges = [self.clean_edge_data(edge) for edge in (edges or [])]
+
+        return {
+            "nodes": cleaned_nodes,
+            "edges": cleaned_edges,
+        }
 
     async def get_users_with_runs_in_range(self) -> List[str]:
         """获取指定时间范围内有运行记录的用户ID列表"""
@@ -210,17 +273,20 @@ class UserWorkflowProfileGenerator:
         workflow_stats = defaultdict(lambda: {
             "count": 0,
             "sample_nodes": None,
+            "sample_edges": None,
             "node_types": [],
-            "flow_task_id": None  # 保存一个代表性的 flow_task_id
+            "flow_task_id": None
         })
 
         for task in flow_tasks:
             nodes = task.get("nodes", [])
+            edges = task.get("edges", [])
             signature = self.generate_workflow_signature(nodes)
 
             workflow_stats[signature]["count"] += 1
             if workflow_stats[signature]["sample_nodes"] is None:
                 workflow_stats[signature]["sample_nodes"] = nodes
+                workflow_stats[signature]["sample_edges"] = edges
                 workflow_stats[signature]["node_types"] = self.extract_node_types(nodes)
                 workflow_stats[signature]["flow_task_id"] = task.get("flow_task_id")
 
@@ -237,15 +303,23 @@ class UserWorkflowProfileGenerator:
             # 尝试匹配工作流获取名称和快照
             flow_info = await self.find_matching_flow(signature, user_id)
 
+            # 清理工作流拓扑数据
+            topology = self.clean_workflow_topology(
+                stats["sample_nodes"],
+                stats["sample_edges"]
+            )
+
             top_workflows.append({
                 "rank": rank,
                 "flow_id": flow_info["flow_id"],
-                "flow_task_id": stats["flow_task_id"],  # 新增：保存 flow_task_id
+                "flow_task_id": stats["flow_task_id"],
                 "workflow_name": flow_info["workflow_name"],
                 "signature": signature,
                 "run_count": stats["count"],
                 "node_types": stats["node_types"],
-                "snapshot_url": flow_info["snapshot_url"]
+                "snapshot_url": flow_info["snapshot_url"],
+                # 完整的工作流拓扑结构
+                "topology": topology,
             })
 
         # 构建用户画像文档
