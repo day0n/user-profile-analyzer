@@ -24,3 +24,22 @@ INFO:     Finished server process [82962]
 INFO:     Started server process [83405]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
+Connected to MongoDB!
+INFO:     127.0.0.1:51905 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51930 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51906 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51947 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51907 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51981 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53015 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53016 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53034 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53028 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53017 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53055 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56453 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56454 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56469 - "GET /api/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56467 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56455 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56516 - "GET /api/users?page=1&limit=10&min_score=1 HTTP/1.1" 200 OK
