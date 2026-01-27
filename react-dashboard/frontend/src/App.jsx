@@ -394,9 +394,10 @@ const App = () => {
                           <PieChart>
                             <Pie
                               data={
-                                selectedCategory && stats.categories[selectedCategory]
+                                (selectedCategory && stats.categories[selectedCategory]
                                   ? Object.entries(stats.categories[selectedCategory].subcategories).map(([name, value]) => ({ name, value }))
                                   : Object.entries(stats.categories).map(([name, data]) => ({ name, value: data.count }))
+                                ).filter(item => item.name !== '教育/培训' && item.value > 0)
                               }
                               cx="50%"
                               cy="40%"
