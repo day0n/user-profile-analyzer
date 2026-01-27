@@ -582,26 +582,6 @@ const App = () => {
               </div>
 
               <div style={{ marginTop: 24 }}>
-                <Title level={5}>Workflow Analysis</Title>
-                <List
-                  dataSource={selectedUser.ai_profile?.workflow_analysis}
-                  renderItem={item => (
-                    <List.Item>
-                      <List.Item.Meta
-                        avatar={<Badge count={item.rank} style={{ backgroundColor: '#1890ff' }} />}
-                        title={
-                          <Space>
-                            {item.purpose}
-                            <Tag color={item.confidence === '高' ? 'green' : 'orange'}>{item.confidence}</Tag>
-                          </Space>
-                        }
-                        description={item.reason}
-                      />
-                    </List.Item>
-                  )}
-                />
-              </div>
-              <div style={{ marginTop: 24 }}>
                 <Title level={5}>Summary</Title>
                 <div style={{ fontStyle: 'italic', color: '#8c8c8c' }}>
                   "{selectedUser.ai_profile?.summary}"
@@ -610,13 +590,16 @@ const App = () => {
 
               {selectedUser.top_workflows?.length > 0 && (
                 <div style={{ marginTop: 24 }}>
-                  <Title level={5}>Top Workflows</Title>
+                  <Title level={5}>Top Workflows & Analysis</Title>
                   <List
                     itemLayout="vertical"
                     dataSource={selectedUser.top_workflows}
                     renderItem={item => {
-                      // Logic to fallback for name and node types
-                      const displayName = item.workflow_name || (item.flow_id ? `Workflow (${item.flow_id.slice(-6)})` : `Workflow #${item.rank}`);
+                      // Find matching analysis by rank
+                      const analysis = selectedUser.ai_profile?.workflow_analysis?.find(a => a.rank === item.rank);
+
+                      // Logic to fallback for name: Use Analysis Purpose if available, else Workflow Name
+                      const displayName = analysis?.purpose || item.workflow_name || (item.flow_id ? `Workflow (${item.flow_id.slice(-6)})` : `Workflow #${item.rank}`);
 
                       let displayNodeTypes = item.node_types || [];
                       if (displayNodeTypes.length === 0 && item.topology?.nodes) {
@@ -626,35 +609,51 @@ const App = () => {
 
                       return (
                         <List.Item
+                          style={{ padding: '16px', background: '#fafafa', borderRadius: 8, marginBottom: 16, border: '1px solid #f0f0f0' }}
                           extra={
                             item.snapshot_url && (
                               <img
-                                width={100}
+                                width={120}
                                 alt="snapshot"
                                 src={item.snapshot_url}
-                                style={{ borderRadius: 8, objectFit: 'cover' }}
+                                style={{ borderRadius: 8, objectFit: 'cover', border: '1px solid #d9d9d9' }}
                               />
                             )
                           }
                         >
                           <List.Item.Meta
-                            avatar={<Badge count={item.rank} color="#722ed1" />}
+                            avatar={<Badge count={item.rank} color="#1890ff" />}
                             title={
-                              <Space>
-                                {displayName}
-                                <Tag color="cyan">Runs: {item.run_count}</Tag>
+                              <Space wrap>
+                                <span style={{ fontWeight: 'bold' }}>{displayName}</span>
+                                {analysis?.confidence && (
+                                  <Tag color={analysis.confidence === '高' ? 'green' : 'orange'}>{analysis.confidence} Confidence</Tag>
+                                )}
+                                <Tag color="blue">Runs: {item.run_count}</Tag>
                               </Space>
                             }
                             description={
-                              <Space direction="vertical" size={2}>
-                                {displayNodeTypes.length > 0 ? (
-                                  <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Nodes: {displayNodeTypes.slice(0, 5).join(', ')}
-                                    {displayNodeTypes.length > 5 && '...'}
-                                  </Text>
-                                ) : <Text type="secondary" style={{ fontSize: 12 }}>Nodes: N/A</Text>}
+                              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                {/* Analysis Content */}
+                                {analysis && (
+                                  <div style={{ padding: '8px 12px', background: '#fff', borderRadius: 4, borderLeft: '3px solid #1890ff' }}>
+                                    <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                                      {analysis.reason}
+                                    </Text>
+                                  </div>
+                                )}
 
-                                {item.flow_id && <Text copyable={{ text: item.flow_id }} style={{ fontSize: 10, color: '#bfbfbf' }}>ID: {item.flow_id}</Text>}
+                                {/* Technical Details */}
+                                <div>
+                                  {displayNodeTypes.length > 0 ? (
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      <span style={{ fontWeight: 'bold' }}>Nodes:</span> {displayNodeTypes.slice(0, 5).join(', ')}
+                                      {displayNodeTypes.length > 5 && '...'}
+                                    </Text>
+                                  ) : <Text type="secondary" style={{ fontSize: 12 }}>Nodes: N/A</Text>}
+                                  <br/>
+                                  {item.flow_id && <Text copyable={{ text: item.flow_id }} style={{ fontSize: 10, color: '#bfbfbf' }}>ID: {item.flow_id}</Text>}
+                                </div>
                               </Space>
                             }
                           />
