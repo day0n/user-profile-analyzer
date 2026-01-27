@@ -398,38 +398,34 @@ const App = () => {
                                   : Object.entries(stats.categories).map(([name, data]) => ({ name, value: data.count }))
                               }
                               cx="50%"
-                              cy="50%"
+                              cy="45%"
                               innerRadius={60}
-                              outerRadius={100}
+                              outerRadius={90}
                               fill="#1890ff"
                               paddingAngle={5}
                               dataKey="value"
                               label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                               onClick={(data) => {
-                                // If drilldown is active, don't trigger global filter
-                                if (!selectedCategory) {
-                                  // Trigger Global Filter
-                                  onGlobalCategorySelect(data.name);
-                                  // Also toggle drilldown visibility locally
-                                  setSelectedCategory(data.name);
-                                }
+                                onGlobalCategorySelect(data.name);
+                                setSelectedCategory(data.name);
                               }}
-                              style={{ cursor: !selectedCategory ? 'pointer' : 'default' }}
+                              style={{ cursor: 'pointer' }}
                             >
+                              {/* Custom Cells */}
                               {(selectedCategory && stats.categories[selectedCategory]
-                                ? Object.entries(stats.categories[selectedCategory].subcategories)
-                                : Object.entries(stats.categories)
-                              ).map((entry, index) => (
+                                ? Object.entries(stats.categories[selectedCategory].subcategories).map(([n, _]) => n)
+                                : Object.entries(stats.categories).map(([n, _]) => n)
+                              ).map((name, index) => (
                                 <Cell
                                   key={`cell-${index}`}
                                   fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#EFDB50', '#ff85c0'][index % 7]}
-                                  stroke={globalCategory === entry[0] ? '#722ed1' : '#fff'}
-                                  strokeWidth={globalCategory === entry[0] ? 3 : 1}
+                                  stroke={globalCategory === name ? '#722ed1' : '#fff'}
+                                  strokeWidth={globalCategory === name ? 3 : 2}
                                 />
                               ))}
                             </Pie>
                             <Tooltip />
-                            <Legend wrapperStyle={{ fontSize: '10px' }} />
+                            <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '10px' }} />
                           </PieChart>
                         </ResponsiveContainer>
                       ) : <Text type="secondary">No category data yet.</Text>}
@@ -452,22 +448,22 @@ const App = () => {
                             <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
                             <YAxis unit="%" />
                             <Tooltip
-                                content={({ active, payload, label }) => {
-                                    if (active && payload && payload.length) {
-                                    const data = payload[0].payload;
-                                    return (
-                                        <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
-                                        <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
-                                        <p style={{ color: '#8884d8', marginBottom: 4 }}>Conversion Rate: {data.rate}%</p>
-                                        <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
-                                            Paid Users: {data.paid}<br/>
-                                            Total Users: {data.total}
-                                        </p>
-                                        </div>
-                                    );
-                                    }
-                                    return null;
-                                }}
+                              content={({ active, payload, label }) => {
+                                if (active && payload && payload.length) {
+                                  const data = payload[0].payload;
+                                  return (
+                                    <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
+                                      <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
+                                      <p style={{ color: '#8884d8', marginBottom: 4 }}>Conversion Rate: {data.rate}%</p>
+                                      <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
+                                        Paid Users: {data.paid}<br />
+                                        Total Users: {data.total}
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
                             />
                             <Line type="monotone" dataKey="rate" stroke="#8884d8" name="Conversion Rate" strokeWidth={2} />
                           </LineChart>
@@ -492,22 +488,22 @@ const App = () => {
                             <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
                             <YAxis unit="%" />
                             <Tooltip
-                                content={({ active, payload, label }) => {
-                                    if (active && payload && payload.length) {
-                                        const data = payload[0].payload;
-                                        return (
-                                            <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
-                                            <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
-                                            <p style={{ color: '#82ca9d', marginBottom: 4 }}>Intent Rate: {data.rate}%</p>
-                                            <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
-                                                Intent Users: {data.intent}<br/>
-                                                Total Users: {data.total}
-                                            </p>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                }}
+                              content={({ active, payload, label }) => {
+                                if (active && payload && payload.length) {
+                                  const data = payload[0].payload;
+                                  return (
+                                    <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
+                                      <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
+                                      <p style={{ color: '#82ca9d', marginBottom: 4 }}>Intent Rate: {data.rate}%</p>
+                                      <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
+                                        Intent Users: {data.intent}<br />
+                                        Total Users: {data.total}
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
                             />
                             <Line type="monotone" dataKey="rate" stroke="#82ca9d" name="Intent Rate" strokeWidth={2} />
                           </LineChart>
@@ -516,28 +512,8 @@ const App = () => {
                     </Card>
                   </Col>
                 </Row>
-                
-                {/* Second Row: Top Industries */}
-                <Row gutter={16} style={{ marginBottom: '24px' }}>
-                     <Col span={24}>
-                        <Card title={globalCategory ? `Top Industries in ${globalCategory}` : "Top Industries (All)"} style={{ height: 400 }}>
-                          {stats.industries && (
-                            <ResponsiveContainer width="100%" height={330}>
-                              <BarChart
-                                data={Object.entries(stats.industries).slice(0, 15).map(([name, value]) => ({ name, value }))}
-                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" interval={0} angle={-30} textAnchor="end" height={60} />
-                                <YAxis />
-                                <Tooltip />
-                                <Bar dataKey="value" fill="#82ca9d" />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          )}
-                        </Card>
-                      </Col>
-                </Row>
+
+
               </Spin>
             )}
 
