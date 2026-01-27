@@ -443,7 +443,7 @@ const App = () => {
                         <ResponsiveContainer width="100%" height={330}>
                           <LineChart
                             data={Object.entries(stats.payment_stats)
-                              .map(([name, data]) => ({ name, rate: data.rate }))
+                              .map(([name, data]) => ({ name, rate: data.rate, paid: data.paid, total: data.total }))
                               .sort((a, b) => b.rate - a.rate)
                             }
                             margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
@@ -451,7 +451,24 @@ const App = () => {
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
                             <YAxis unit="%" />
-                            <Tooltip />
+                            <Tooltip
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                    const data = payload[0].payload;
+                                    return (
+                                        <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
+                                        <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
+                                        <p style={{ color: '#8884d8', marginBottom: 4 }}>Conversion Rate: {data.rate}%</p>
+                                        <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
+                                            Paid Users: {data.paid}<br/>
+                                            Total Users: {data.total}
+                                        </p>
+                                        </div>
+                                    );
+                                    }
+                                    return null;
+                                }}
+                            />
                             <Line type="monotone" dataKey="rate" stroke="#8884d8" name="Conversion Rate" strokeWidth={2} />
                           </LineChart>
                         </ResponsiveContainer>
@@ -466,7 +483,7 @@ const App = () => {
                         <ResponsiveContainer width="100%" height={330}>
                           <LineChart
                             data={Object.entries(stats.payment_stats)
-                              .map(([name, data]) => ({ name, rate: data.intent_rate }))
+                              .map(([name, data]) => ({ name, rate: data.intent_rate, intent: data.intent, total: data.total }))
                               .sort((a, b) => b.rate - a.rate)
                             }
                             margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
@@ -474,7 +491,24 @@ const App = () => {
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
                             <YAxis unit="%" />
-                            <Tooltip />
+                            <Tooltip
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                        const data = payload[0].payload;
+                                        return (
+                                            <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
+                                            <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
+                                            <p style={{ color: '#82ca9d', marginBottom: 4 }}>Intent Rate: {data.rate}%</p>
+                                            <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
+                                                Intent Users: {data.intent}<br/>
+                                                Total Users: {data.total}
+                                            </p>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
                             <Line type="monotone" dataKey="rate" stroke="#82ca9d" name="Intent Rate" strokeWidth={2} />
                           </LineChart>
                         </ResponsiveContainer>
