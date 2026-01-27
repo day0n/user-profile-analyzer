@@ -39,6 +39,8 @@ collection = db["user_workflow_profile"]
 
 # --- Models ---
 class WorkflowAnalysis(BaseModel):
+    category: Optional[str] = None  # Added category
+    subcategory: Optional[str] = None  # Added subcategory
     rank: int
     purpose: str
     confidence: str
@@ -59,7 +61,8 @@ class BusinessPotential(BaseModel):
 class AiProfile(BaseModel):
     primary_purpose: Optional[str] = None
     user_type: Optional[str] = None
-    user_category: Optional[str] = None  # Added user_category
+    user_category: Optional[str] = None
+    user_subcategory: Optional[str] = None  # Added user_subcategory
     activity_level: Optional[str] = None
     content_focus: List[str] = []
     tags: List[str] = []
@@ -170,13 +173,34 @@ async def get_stats():
     ]
     pipeline_category = [
         {"$match": {"ai_profile.user_category": {"$exists": True, "$ne": None}}},
-        {"$group": {"_id": "$ai_profile.user_category", "count": {"$sum": 1}}},
+        {
+            "$group": {
+                "_id": {
+                    "category": "$ai_profile.user_category",
+                    "subcategory": "$ai_profile.user_subcategory"
+                },
+                "count": {"$sum": 1}
+            }
+        },
         {"$sort": {"count": -1}}
     ]
     
     industries = await collection.aggregate(pipeline_industry).to_list(None)
     stages = await collection.aggregate(pipeline_stage).to_list(None)
-    categories = await collection.aggregate(pipeline_category).to_list(None)
+    categories_raw = await collection.aggregate(pipeline_category).to_list(None)
+
+    # Process categories into a nested structure
+    categories_data = {}
+    for item in categories_raw:
+        cat = item["_id"].get("category")
+        sub = item["_id"].get("subcategory") or "Unknown"
+        count = item["count"]
+        
+        if cat not in categories_data:
+            categories_data[cat] = {"count": 0, "subcategories": {}}
+        
+        categories_data[cat]["count"] += count
+        categories_data[cat]["subcategories"][sub] = count
     
     high_potential = await collection.count_documents({"ai_profile.business_potential.score": {"$gte": 7}})
     total_users = await collection.count_documents({})
@@ -184,7 +208,7 @@ async def get_stats():
     return {
         "industries": {i["_id"]: i["count"] for i in industries if i["_id"]},
         "stages": {i["_id"]: i["count"] for i in stages if i["_id"]},
-        "categories": {i["_id"]: i["count"] for i in categories if i["_id"]},
+        "categories": categories_data,
         "high_potential_count": high_potential,
         "total_users": total_users
     }

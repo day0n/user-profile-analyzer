@@ -74,8 +74,9 @@ class UserWorkflowProfileGenerator:
         self.user_collection = self.db["user"]
         self.profile_collection = self.db["user_workflow_profile"]
 
-        # 配置
-        self.days_range = 30  # 查询最近30天
+        # 配置 - 时间范围：2025年10月1日 - 2026年1月27日
+        self.start_date = datetime(2025, 10, 1)
+        self.end_date = datetime(2026, 1, 27, 23, 59, 59)
         self.top_n = 15  # Top 15 工作流
         self.concurrency = concurrency  # 并发数
         self.semaphore = asyncio.Semaphore(concurrency)
@@ -112,11 +113,9 @@ class UserWorkflowProfileGenerator:
         return list(set(node.get("type", "unknown") for node in nodes))
 
     async def get_users_with_runs_in_range(self) -> List[str]:
-        """获取30天内有运行记录的用户ID列表"""
-        cutoff_date = datetime.now() - timedelta(days=self.days_range)
-
+        """获取指定时间范围内有运行记录的用户ID列表"""
         pipeline = [
-            {"$match": {"created_at": {"$gte": cutoff_date}}},
+            {"$match": {"created_at": {"$gte": self.start_date, "$lte": self.end_date}}},
             {"$group": {"_id": "$user_id"}},
         ]
 
@@ -133,13 +132,11 @@ class UserWorkflowProfileGenerator:
         return user.get("user_email") if user else None
 
     async def get_user_flow_tasks(self, user_id: str) -> List[Dict]:
-        """获取用户30天内的所有运行记录"""
-        cutoff_date = datetime.now() - timedelta(days=self.days_range)
-
+        """获取用户在指定时间范围内的所有运行记录"""
         cursor = self.flow_task_collection.find(
             {
                 "user_id": user_id,
-                "created_at": {"$gte": cutoff_date}
+                "created_at": {"$gte": self.start_date, "$lte": self.end_date}
             },
             {
                 "_id": 0,
@@ -252,11 +249,13 @@ class UserWorkflowProfileGenerator:
             "user_id": user_id,
             "user_email": user_email,
             "stats": {
-                "total_runs_30d": len(flow_tasks),
-                "active_days_30d": active_days
+                "total_runs": len(flow_tasks),
+                "active_days": active_days,
+                "period": "2024-10-01 ~ 2025-01-27"
             },
             "top_workflows": top_workflows,
             "ai_profile": None,  # 后续 AI 分析填充
+            "payment_stats": None,  # 后续付费统计填充
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         }
@@ -297,7 +296,7 @@ class UserWorkflowProfileGenerator:
         print("=" * 60)
 
         # 1. 获取有运行记录的用户
-        print(f"\n[1/3] 查询最近 {self.days_range} 天有运行记录的用户...")
+        print(f"\n[1/3] 查询 {self.start_date.strftime('%Y-%m-%d')} ~ {self.end_date.strftime('%Y-%m-%d')} 有运行记录的用户...")
         user_ids = await self.get_users_with_runs_in_range()
         total_users = len(user_ids)
         print(f"      找到 {total_users} 个用户")
