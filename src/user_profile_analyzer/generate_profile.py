@@ -109,19 +109,14 @@ class UserWorkflowProfileGenerator:
         )
         return signature
 
-    def extract_node_types(self, nodes: List[Dict]) -> List[str]:
-        """提取节点类型列表"""
-        if not nodes:
-            return []
-        return list(set(node.get("type", "unknown") for node in nodes))
-
     def clean_node_data(self, node: Dict) -> Dict:
         """
         清理节点数据，用于保存到数据库
 
         规则：
-        - 输入型节点保留完整 data，但剔除 results/model_options
+        - 输入型节点保留 data，但剔除 results/model_options 和大字段（base64/视频/音频）
         - 非输入节点只保留关键字段（prompt/模型/语音/比例）
+        - 大字段（imageBase64/inputVideo/inputAudio）在分析时通过 flow_task_id 拉取
         """
         node_type = node.get("type", "unknown")
         node_data = node.get("data", {})
@@ -133,12 +128,22 @@ class UserWorkflowProfileGenerator:
             "isInputNode": node_type in self.INPUT_NODE_TYPES,
         }
 
+        # 需要排除的大字段（避免超过 16MB 文档限制）
+        large_fields = ["results", "model_options", "imageBase64", "inputVideo", "inputAudio", "videoBase64", "audioBase64"]
+
         if node_type in self.INPUT_NODE_TYPES:
-            # 输入节点：保留全部 data，但剔除 results / model_options
+            # 输入节点：保留 data，但剔除大字段
             cleaned_data = {
                 k: v for k, v in node_data.items()
-                if k not in ["results", "model_options"]
+                if k not in large_fields
             }
+            # 标记是否有媒体数据（供分析时知道需要拉取）
+            if node_data.get("imageBase64"):
+                cleaned_data["hasImage"] = True
+            if node_data.get("inputVideo") or node_data.get("videoBase64"):
+                cleaned_data["hasVideo"] = True
+            if node_data.get("inputAudio") or node_data.get("audioBase64"):
+                cleaned_data["hasAudio"] = True
             cleaned_node["data"] = cleaned_data
         else:
             # 非输入节点：只保留关键字段
@@ -274,7 +279,6 @@ class UserWorkflowProfileGenerator:
             "count": 0,
             "sample_nodes": None,
             "sample_edges": None,
-            "node_types": [],
             "flow_task_id": None
         })
 
@@ -287,7 +291,6 @@ class UserWorkflowProfileGenerator:
             if workflow_stats[signature]["sample_nodes"] is None:
                 workflow_stats[signature]["sample_nodes"] = nodes
                 workflow_stats[signature]["sample_edges"] = edges
-                workflow_stats[signature]["node_types"] = self.extract_node_types(nodes)
                 workflow_stats[signature]["flow_task_id"] = task.get("flow_task_id")
 
         # 按运行次数排序，取 Top N
@@ -314,9 +317,7 @@ class UserWorkflowProfileGenerator:
                 "flow_id": flow_info["flow_id"],
                 "flow_task_id": stats["flow_task_id"],
                 "workflow_name": flow_info["workflow_name"],
-                "signature": signature,
                 "run_count": stats["count"],
-                "node_types": stats["node_types"],
                 "snapshot_url": flow_info["snapshot_url"],
                 # 完整的工作流拓扑结构
                 "topology": topology,
@@ -329,7 +330,7 @@ class UserWorkflowProfileGenerator:
             "stats": {
                 "total_runs": len(flow_tasks),
                 "active_days": active_days,
-                "period": "2024-10-01 ~ 2025-01-27"
+                "period": "2025-10-01 ~ 2026-01-27"
             },
             "top_workflows": top_workflows,
             "ai_profile": None,  # 后续 AI 分析填充

@@ -405,12 +405,12 @@ class AIProfileAnalyzer:
                     "created_at": 1,
                     "nodes": {
                         "$map": {
-                            "input": "$nodes",
+                            "input": {"$ifNull": ["$nodes", []]},
                             "as": "n",
                             "in": {
                                 "id": "$$n.id",
                                 "type": "$$n.type",
-                                "label": "$$n.data.label",
+                                "label": {"$ifNull": ["$$n.data.label", None]},
                                 "isInputNode": {
                                     "$in": ["$$n.type", self.INPUT_NODE_TYPES]
                                 },
@@ -420,7 +420,7 @@ class AIProfileAnalyzer:
                                         # 输入节点：保留全部 data，但剔除 results / model_options
                                         {
                                             "$let": {
-                                                "vars": {"data_kv": {"$objectToArray": "$$n.data"}},
+                                                "vars": {"data_kv": {"$objectToArray": {"$ifNull": ["$$n.data", {}]}}},
                                                 "in": {
                                                     "$arrayToObject": {
                                                         "$filter": {
@@ -436,10 +436,10 @@ class AIProfileAnalyzer:
                                         },
                                         # 非输入节点：只保留关键字段
                                         {
-                                            "prompt": "$$n.data.inputText",
-                                            "selectedModels": "$$n.data.selectedModels",
-                                            "selectedVoice": "$$n.data.selectedVoice",
-                                            "aspectRatio": "$$n.data.aspectRatio"
+                                            "prompt": {"$ifNull": ["$$n.data.inputText", None]},
+                                            "selectedModels": {"$ifNull": ["$$n.data.selectedModels", None]},
+                                            "selectedVoice": {"$ifNull": ["$$n.data.selectedVoice", None]},
+                                            "aspectRatio": {"$ifNull": ["$$n.data.aspectRatio", None]}
                                         }
                                     ]
                                 }
@@ -448,7 +448,7 @@ class AIProfileAnalyzer:
                     },
                     "edges": {
                         "$map": {
-                            "input": "$edges",
+                            "input": {"$ifNull": ["$edges", []]},
                             "as": "e",
                             "in": {
                                 "id": "$$e.id",
@@ -575,13 +575,29 @@ class AIProfileAnalyzer:
         lines.append(f"### 工作流 {rank}")
         lines.append(f"- 名称: {workflow.get('workflow_name') or '未命名'}")
         lines.append(f"- 运行次数: {workflow.get('run_count', 0)}")
+        lines.append(f"- flow_task_id: {workflow.get('flow_task_id', 'N/A')}")
 
         if topology_data:
+            # 输出 topology_data 中的元信息
+            if topology_data.get("user_id"):
+                lines.append(f"- user_id: {topology_data.get('user_id')}")
+            if topology_data.get("status"):
+                lines.append(f"- status: {topology_data.get('status')}")
+            if topology_data.get("created_at"):
+                created_at = topology_data.get("created_at")
+                if hasattr(created_at, 'strftime'):
+                    lines.append(f"- created_at: {created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                else:
+                    lines.append(f"- created_at: {created_at}")
+
             nodes = topology_data.get("nodes", [])
             edges = topology_data.get("edges", [])
 
             lines.append(f"- 节点数量: {len(nodes)}")
             lines.append(f"- 节点列表:")
+
+            # 收集有图片的节点ID，用于在prompt中标注
+            nodes_with_images = []
 
             for node in nodes:
                 node_id = node.get("id", "unknown")
@@ -597,27 +613,38 @@ class AIProfileAnalyzer:
                     node_desc += " (输入节点)"
                 lines.append(node_desc)
 
-                # 输入节点：显示完整数据
+                # 输入节点：显示完整数据，不截断文本
                 if is_input and node_data:
                     for key, value in node_data.items():
                         if value is None or value == "" or key in ["label"]:
                             continue
-                        # 截断过长的文本
-                        if isinstance(value, str) and len(value) > 200:
-                            value = value[:200] + "..."
-                        # 跳过 base64 图片数据（太长）
-                        if isinstance(value, str) and (value.startswith("data:image") or len(value) > 500):
-                            if "base64" in key.lower() or "image" in key.lower():
-                                lines.append(f"    {key}: [图片数据]")
-                                continue
+
+                        # 图片/视频/音频字段：标记为已附加，通过多模态传递
+                        if key in ["imageBase64", "inputVideo", "inputAudio", "videoBase64", "audioBase64"]:
+                            if isinstance(value, str) and value.startswith("http"):
+                                lines.append(f"    {key}: [媒体已附加，URL: {value[:100]}...]")
+                                if "image" in key.lower():
+                                    nodes_with_images.append(node_id)
+                            elif isinstance(value, str) and value.startswith("data:"):
+                                lines.append(f"    {key}: [媒体已附加，base64数据]")
+                                if "image" in key.lower():
+                                    nodes_with_images.append(node_id)
+                            continue
+
+                        # hasImage/hasVideo/hasAudio 标记
+                        if key in ["hasImage", "hasVideo", "hasAudio"]:
+                            if value:
+                                lines.append(f"    {key}: {value}")
+                                if key == "hasImage":
+                                    nodes_with_images.append(node_id)
+                            continue
+
+                        # 文本字段：不截断，完整输出
                         lines.append(f"    {key}: {value}")
                 else:
-                    # 非输入节点：只显示关键字段
+                    # 非输入节点：显示关键字段，不截断
                     if node_data.get("prompt"):
-                        prompt = node_data["prompt"]
-                        if len(prompt) > 150:
-                            prompt = prompt[:150] + "..."
-                        lines.append(f"    prompt: {prompt}")
+                        lines.append(f"    prompt: {node_data['prompt']}")
                     if node_data.get("selectedModels"):
                         lines.append(f"    selectedModels: {node_data['selectedModels']}")
                     if node_data.get("selectedVoice"):
@@ -625,10 +652,10 @@ class AIProfileAnalyzer:
                     if node_data.get("aspectRatio"):
                         lines.append(f"    aspectRatio: {node_data['aspectRatio']}")
 
-            # 连接关系
+            # 连接关系：输出全部，不截断
             if edges:
-                lines.append(f"- 节点连接关系 (edges):")
-                for edge in edges[:15]:  # 最多显示15条连接
+                lines.append(f"- 节点连接关系 (edges，共{len(edges)}条):")
+                for edge in edges:
                     source = edge.get("source", "?")
                     target = edge.get("target", "?")
                     source_handle = edge.get("sourceHandle", "")
@@ -637,10 +664,23 @@ class AIProfileAnalyzer:
                     if source_handle or target_handle:
                         edge_desc += f" ({source_handle} → {target_handle})"
                     lines.append(edge_desc)
+
+            # 标注哪些节点有图片已附加
+            if nodes_with_images:
+                lines.append(f"- 注意: 节点 {', '.join(nodes_with_images)} 的图片已通过多模态附加")
         else:
             # 没有完整数据时，使用基本信息
-            lines.append(f"- 节点类型: {', '.join(workflow.get('node_types', []))}")
-            lines.append(f"- 签名: {workflow.get('signature', '')}")
+            topology = workflow.get("topology", {})
+            if topology:
+                nodes = topology.get("nodes", [])
+                edges = topology.get("edges", [])
+                lines.append(f"- 节点数量: {len(nodes)}")
+                for node in nodes:
+                    node_id = node.get("id", "unknown")
+                    node_type = node.get("type", "unknown")
+                    lines.append(f"  - [{node_type}] id={node_id}")
+            else:
+                lines.append(f"- 无拓扑数据")
 
         lines.append("")
         return "\n".join(lines)
