@@ -436,6 +436,7 @@ const App = () => {
                           <LineChart
                             data={Object.entries(stats.payment_stats)
                               .map(([name, data]) => ({ name, rate: data.rate, paid: data.paid, total: data.total }))
+                              .filter(item => item.name !== '教育/培训')
                               .sort((a, b) => b.rate - a.rate)
                             }
                             margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
@@ -476,6 +477,7 @@ const App = () => {
                           <LineChart
                             data={Object.entries(stats.payment_stats)
                               .map(([name, data]) => ({ name, rate: data.intent_rate, intent: data.intent, total: data.total }))
+                              .filter(item => item.name !== '教育/培训')
                               .sort((a, b) => b.rate - a.rate)
                             }
                             margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
