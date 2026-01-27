@@ -140,6 +140,7 @@ class UserWorkflowProfileGenerator:
             },
             {
                 "_id": 0,
+                "flow_task_id": 1,
                 "nodes": 1,
                 "edges": 1,
                 "status": 1,
@@ -209,7 +210,8 @@ class UserWorkflowProfileGenerator:
         workflow_stats = defaultdict(lambda: {
             "count": 0,
             "sample_nodes": None,
-            "node_types": []
+            "node_types": [],
+            "flow_task_id": None  # 保存一个代表性的 flow_task_id
         })
 
         for task in flow_tasks:
@@ -220,6 +222,7 @@ class UserWorkflowProfileGenerator:
             if workflow_stats[signature]["sample_nodes"] is None:
                 workflow_stats[signature]["sample_nodes"] = nodes
                 workflow_stats[signature]["node_types"] = self.extract_node_types(nodes)
+                workflow_stats[signature]["flow_task_id"] = task.get("flow_task_id")
 
         # 按运行次数排序，取 Top N
         sorted_workflows = sorted(
@@ -237,6 +240,7 @@ class UserWorkflowProfileGenerator:
             top_workflows.append({
                 "rank": rank,
                 "flow_id": flow_info["flow_id"],
+                "flow_task_id": stats["flow_task_id"],  # 新增：保存 flow_task_id
                 "workflow_name": flow_info["workflow_name"],
                 "signature": signature,
                 "run_count": stats["count"],

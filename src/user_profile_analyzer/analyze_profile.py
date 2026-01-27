@@ -56,7 +56,7 @@ def load_env():
 
 
 # Prompt 模板
-ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于理解用户的真实使用意图和商业价值。请分析以下用户在AI创作平台上运行的工作流，判断每个工作流的目的，并对用户进行精准分类。
+ANALYSIS_PROMPT = """你是工作流结构分析助手，专注于理解用户的真实使用意图和商业价值。请分析以下用户在AI创作平台上运行的工作流拓扑结构，判断每个工作流的目的，并对用户进行精准分类。
 
 ## 用户基本信息
 - 统计周期：2025年10月1日 - 2026年1月27日
@@ -64,13 +64,59 @@ ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于理解用�
 - 活跃天数：{active_days}
 
 ## 用户 Top {workflow_count} 工作流
-以下是用户运行最多的工作流，请仔细分析每个工作流的节点组合、输入内容、图片素材，理解用户的真实使用意图。
+以下是用户运行最多的工作流拓扑结构（nodes + edges），请据此判断工作流用途与结构。
 
 {workflows_text}
+
+## 【字段说明】
+- flow_task_id：运行实例ID
+- user_id：用户ID
+- status：运行状态（running/success/fail等）
+- created_at：创建时间
+- nodes：节点列表
+  - id：节点ID
+  - type：节点类型（重要）
+    - 输入型节点固定四类：
+      - textInput：文本输入
+      - imageInput：图片输入
+      - videoInput：视频输入
+      - audioInput：音频输入
+    - 其余类型可根据名称判断用途（如 textGenerator, imageMaker, videoMaker, textToVideo, textToSpeech, voiceCloner 等）
+  - label：节点名称（前端展示名）
+  - isInputNode：是否为输入型节点
+  - data：节点配置数据
+    - 输入型节点 data 中会保留用户输入的关键字段（非常重要）：
+      - inputText：用户输入的文本 prompt
+      - imageBase64：用户上传图片（base64或URL）
+      - inputVideo：用户输入视频
+      - inputAudio：用户输入音频
+      - selectedModels：用户选的模型列表
+      - selectedVoice：用户选的语音
+      - aspectRatio：比例
+      - 以及其他配置字段（除 results/model_options 已移除）
+    - 非输入型节点 data 只保留关键字段：
+      - prompt（inputText）
+      - selectedModels
+      - selectedVoice
+      - aspectRatio
+- edges：连线列表
+  - source/target：连接的节点
+  - sourceHandle/targetHandle：连接口，反映数据流通道
+
+## 【分析规则】
+1) 先识别所有输入型节点（isInputNode=true）及其用户输入内容。
+2) 根据 edges 还原拓扑结构：
+   - 入口节点：入度为 0
+   - 出口节点：出度为 0
+   - 按拓扑顺序描述每一步的流向
+3) 结合节点 type + prompt/模型/媒体输入判断意图。
+4) 不要编造缺失信息；无法确定就标注"无法从数据确认"
 
 ## 节点类型说明
 - imageInput: 图片输入（用户上传的素材）
 - textInput: 文本输入（用户的 prompt/描述）
+- videoInput: 视频输入（用户上传的视频）
+- audioInput: 音频输入（用户上传的音频）
 - imageToImage: 图生图（风格转换、修图等）
 - imageMaker: 文生图
 - videoMaker: 图生视频
@@ -81,17 +127,18 @@ ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于理解用�
 - textToSpeech: 文字转语音
 - videoLipSync: 视频口型同步
 - musicGenerator: AI 音乐生成
+- voiceCloner: 语音克隆
 
 ## 7大用户分类体系
 
-**重要：必须从以下7个大类中选择1个，并选择对应的子分类！**
+**重要：必须从以下7个大类中选择1个，并选择对应的子分类！子分类必须选择，不能填"无法判断"！**
 
 ### 1. 电商上架转化
 **核心本质：** 只用于电商平台商品上架的静态图片素材
 - **输出形态：** 图片（非视频）
 - **使用场景：** 商品主图、详情页、SKU对比图、白底图、Listing优化
 - **判断思路：** 用户在为电商平台准备商品展示图片，目的是上架和展示
-- **子分类（按商品品类）：**
+- **子分类（按商品品类，必选一个）：**
   - 服装/鞋包
   - 美妆/护肤
   - 家居/家具
@@ -99,14 +146,16 @@ ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于理解用�
   - 食品/饮料
   - 母婴/玩具
   - 珠宝/配饰
-  - 其他品类
+  - 宠物用品
+  - 运动户外
+  - 综合/其他品类
 
 ### 2. 电商营销/投放
 **核心本质：** 具有营销属性的电商视频内容，用于在TK、IG等社交平台投放
 - **输出形态：** 视频为主
 - **使用场景：** TikTok广告、Instagram推广、抖音带货、短视频营销
 - **判断思路：** 用户在制作用于投放和带货的视频广告，有明确的营销转化目的
-- **子分类（按商品品类）：**
+- **子分类（按商品品类，必选一个）：**
   - 服装/鞋包
   - 美妆/护肤
   - 家居/家具
@@ -114,14 +163,16 @@ ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于理解用�
   - 食品/饮料
   - 母婴/玩具
   - 珠宝/配饰
-  - 其他品类
+  - 宠物用品
+  - 运动户外
+  - 综合/其他品类
 
 ### 3. 品牌广告及商业广告
 **核心本质：** TVC、品牌认知塑造，目的是提升品牌形象而非直接销售
 - **输出形态：** 高质量视频或图片
 - **使用场景：** 品牌TVC、企业宣传片、品牌形象片、商业广告
 - **判断思路：** 用户在为品牌做形象宣传，强调品牌认知而非直接卖货
-- **子分类（按行业）：**
+- **子分类（按行业，必选一个）：**
   - 快消品牌
   - 科技/互联网
   - 汽车/出行
@@ -129,49 +180,55 @@ ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于理解用�
   - 教育/培训
   - 房产/地产
   - 餐饮/食品
-  - 其他行业
+  - 医疗/健康
+  - 综合/其他行业
 
 ### 4. 社媒内容与IP
 **核心本质：** 真人KOL内容、明确体现社媒属性的内容创作
 - **输出形态：** 视频为主，真人出镜
 - **使用场景：** KOL内容、博主视频、社交媒体原创内容、IP打造
 - **判断思路：** 用户在制作真人出镜的社媒内容，有明确的博主/KOL属性
-- **子分类（按内容领域）：**
-  - 美妆/穿搭博主
-  - 美食博主
-  - 生活方式博主
-  - 科技/数码博主
-  - 娱乐/搞笑博主
-  - 知识/教育博主
-  - 其他博主
+- **子分类（按内容领域，必选一个）：**
+  - 美妆/穿搭
+  - 美食/探店
+  - 生活/Vlog
+  - 科技/数码
+  - 娱乐/搞笑
+  - 知识/教育
+  - 健身/运动
+  - 旅行/户外
+  - 游戏/二次元
+  - 综合/其他领域
 
 ### 5. 影视创作
 **核心本质：** 强调叙事性、镜头语言的影视内容创作
 - **输出形态：** 视频
 - **使用场景：** 短剧、微电影、MV、动画、叙事性内容
 - **判断思路：** 用户在创作有叙事性和镜头语言的影视内容，强调故事和艺术表达
-- **子分类（按内容类型）：**
+- **子分类（按内容类型，必选一个）：**
   - 漫剧/动画
   - 短剧/微电影
   - MV/音乐视频
-  - 纪录片
-  - 其他影视
+  - 纪录片/Vlog
+  - 特效/视觉艺术
+  - 综合/其他影视
 
 ### 6. 设计
 **核心本质：** 海报、Logo等平面设计和视觉设计
 - **输出形态：** 图片
 - **使用场景：** 海报设计、Logo设计、品牌视觉、UI设计、插画
 - **判断思路：** 用户在进行平面设计或视觉设计工作
-- **子分类（按设计类型）：**
-  - 海报设计
+- **子分类（按设计类型，必选一个）：**
+  - 海报/宣传图
   - Logo/品牌视觉
   - UI/界面设计
-  - 插画/艺术
-  - 其他设计
+  - 插画/艺术创作
+  - 封面/缩略图
+  - 综合/其他设计
 
 ### 7. 其他
 **核心本质：** 无法归入以上6类的内容
-- **子分类：** 无
+- **子分类：** 综合/未分类
 
 ## 分类优先级（当用户同时符合多个特征时）
 电商上架转化 > 电商营销/投放 > 品牌广告及商业广告 > 社媒内容与IP > 影视创作 > 设计 > 其他
@@ -237,9 +294,9 @@ ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于理解用�
 - 1-2分：纯粹个人娱乐或测试
 
 ## 重要提示
-- 如果信息不足无法判断子分类，填写"无法判断"
-- 不要猜测，基于实际内容判断
-- 子分类必须从对应大类的选项中选择
+- **子分类必须选择**，每个大类都有"综合/其他"兜底选项，不要填"无法判断"
+- 根据用户工作流的主要内容特征选择最接近的子分类
+- 如果确实无法细分，选择对应大类的"综合/其他xxx"选项
 
 只输出JSON，不要其他内容。"""
 
@@ -321,9 +378,101 @@ class AIProfileAnalyzer:
 
         return await cursor.to_list(length=None)
 
+    # 输入型节点类型
+    INPUT_NODE_TYPES = ["textInput", "imageInput", "videoInput", "audioInput"]
+
+    async def get_workflow_topology_data(self, flow_task_id: str) -> Optional[Dict]:
+        """
+        通过 flow_task_id 查询关键拓扑数据
+
+        特点：
+        - 不返回任何结果类字段（result / results 不要）
+        - 输入型四个节点数据全部保留（textInput / imageInput / videoInput / audioInput）
+        - 去掉 model_options
+        - 非输入节点只保留关键配置字段（prompt/模型/语音/比例）
+        """
+        if not flow_task_id:
+            return None
+
+        pipeline = [
+            {"$match": {"flow_task_id": flow_task_id}},
+            {
+                "$project": {
+                    "_id": 0,
+                    "flow_task_id": 1,
+                    "user_id": 1,
+                    "status": 1,
+                    "created_at": 1,
+                    "nodes": {
+                        "$map": {
+                            "input": "$nodes",
+                            "as": "n",
+                            "in": {
+                                "id": "$$n.id",
+                                "type": "$$n.type",
+                                "label": "$$n.data.label",
+                                "isInputNode": {
+                                    "$in": ["$$n.type", self.INPUT_NODE_TYPES]
+                                },
+                                "data": {
+                                    "$cond": [
+                                        {"$in": ["$$n.type", self.INPUT_NODE_TYPES]},
+                                        # 输入节点：保留全部 data，但剔除 results / model_options
+                                        {
+                                            "$let": {
+                                                "vars": {"data_kv": {"$objectToArray": "$$n.data"}},
+                                                "in": {
+                                                    "$arrayToObject": {
+                                                        "$filter": {
+                                                            "input": "$$data_kv",
+                                                            "as": "kv",
+                                                            "cond": {
+                                                                "$not": {"$in": ["$$kv.k", ["results", "model_options"]]}
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        # 非输入节点：只保留关键字段
+                                        {
+                                            "prompt": "$$n.data.inputText",
+                                            "selectedModels": "$$n.data.selectedModels",
+                                            "selectedVoice": "$$n.data.selectedVoice",
+                                            "aspectRatio": "$$n.data.aspectRatio"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "edges": {
+                        "$map": {
+                            "input": "$edges",
+                            "as": "e",
+                            "in": {
+                                "id": "$$e.id",
+                                "source": "$$e.source",
+                                "target": "$$e.target",
+                                "sourceHandle": "$$e.sourceHandle",
+                                "targetHandle": "$$e.targetHandle"
+                            }
+                        }
+                    }
+                }
+            }
+        ]
+
+        cursor = self.flow_task_collection.aggregate(pipeline)
+        results = await cursor.to_list(length=1)
+
+        if results:
+            return results[0]
+        return None
+
     async def get_workflow_full_data(self, user_id: str, signature: str) -> Optional[Dict]:
         """
-        获取工作流的完整数据（包含节点输入）
+        获取工作流的完整数据（包含节点和连接关系）
 
         通过签名匹配找到对应的 flow_task
         """
@@ -336,6 +485,7 @@ class AIProfileAnalyzer:
             },
             {
                 "nodes": 1,
+                "edges": 1,
                 "created_at": 1
             }
         ).sort("created_at", -1).limit(100)
@@ -346,6 +496,7 @@ class AIProfileAnalyzer:
             if task_signature == signature:
                 return {
                     "nodes": nodes,
+                    "edges": task.get("edges", []),
                     "created_at": task.get("created_at")
                 }
 
@@ -418,32 +569,78 @@ class AIProfileAnalyzer:
             "texts": texts
         }
 
-    def _format_workflow_for_prompt(self, rank: int, workflow: Dict, full_data: Optional[Dict]) -> str:
-        """格式化单个工作流用于 prompt"""
+    def _format_workflow_for_prompt(self, rank: int, workflow: Dict, topology_data: Optional[Dict]) -> str:
+        """格式化单个工作流用于 prompt，包含完整拓扑结构"""
         lines = []
         lines.append(f"### 工作流 {rank}")
         lines.append(f"- 名称: {workflow.get('workflow_name') or '未命名'}")
         lines.append(f"- 运行次数: {workflow.get('run_count', 0)}")
-        lines.append(f"- 节点类型: {', '.join(workflow.get('node_types', []))}")
-        lines.append(f"- 签名: {workflow.get('signature', '')}")
 
-        if full_data:
-            nodes = full_data.get("nodes", [])
-            media = self._extract_media_urls(nodes)
+        if topology_data:
+            nodes = topology_data.get("nodes", [])
+            edges = topology_data.get("edges", [])
 
-            if media["texts"]:
-                lines.append(f"- 用户输入文本:")
-                for i, text in enumerate(media["texts"][:3], 1):
-                    # 截断过长的文本
-                    if len(text) > 200:
-                        text = text[:200] + "..."
-                    lines.append(f"  {i}. {text}")
+            lines.append(f"- 节点数量: {len(nodes)}")
+            lines.append(f"- 节点列表:")
 
-            if media["images"]:
-                lines.append(f"- 图片数量: {len(media['images'])}")
+            for node in nodes:
+                node_id = node.get("id", "unknown")
+                node_type = node.get("type", "unknown")
+                node_label = node.get("label", "")
+                is_input = node.get("isInputNode", False)
+                node_data = node.get("data", {})
 
-            if media["videos"]:
-                lines.append(f"- 视频数量: {len(media['videos'])}")
+                node_desc = f"  - [{node_type}] id={node_id}"
+                if node_label:
+                    node_desc += f" label=\"{node_label}\""
+                if is_input:
+                    node_desc += " (输入节点)"
+                lines.append(node_desc)
+
+                # 输入节点：显示完整数据
+                if is_input and node_data:
+                    for key, value in node_data.items():
+                        if value is None or value == "" or key in ["label"]:
+                            continue
+                        # 截断过长的文本
+                        if isinstance(value, str) and len(value) > 200:
+                            value = value[:200] + "..."
+                        # 跳过 base64 图片数据（太长）
+                        if isinstance(value, str) and (value.startswith("data:image") or len(value) > 500):
+                            if "base64" in key.lower() or "image" in key.lower():
+                                lines.append(f"    {key}: [图片数据]")
+                                continue
+                        lines.append(f"    {key}: {value}")
+                else:
+                    # 非输入节点：只显示关键字段
+                    if node_data.get("prompt"):
+                        prompt = node_data["prompt"]
+                        if len(prompt) > 150:
+                            prompt = prompt[:150] + "..."
+                        lines.append(f"    prompt: {prompt}")
+                    if node_data.get("selectedModels"):
+                        lines.append(f"    selectedModels: {node_data['selectedModels']}")
+                    if node_data.get("selectedVoice"):
+                        lines.append(f"    selectedVoice: {node_data['selectedVoice']}")
+                    if node_data.get("aspectRatio"):
+                        lines.append(f"    aspectRatio: {node_data['aspectRatio']}")
+
+            # 连接关系
+            if edges:
+                lines.append(f"- 节点连接关系 (edges):")
+                for edge in edges[:15]:  # 最多显示15条连接
+                    source = edge.get("source", "?")
+                    target = edge.get("target", "?")
+                    source_handle = edge.get("sourceHandle", "")
+                    target_handle = edge.get("targetHandle", "")
+                    edge_desc = f"  - {source} → {target}"
+                    if source_handle or target_handle:
+                        edge_desc += f" ({source_handle} → {target_handle})"
+                    lines.append(edge_desc)
+        else:
+            # 没有完整数据时，使用基本信息
+            lines.append(f"- 节点类型: {', '.join(workflow.get('node_types', []))}")
+            lines.append(f"- 签名: {workflow.get('signature', '')}")
 
         lines.append("")
         return "\n".join(lines)
@@ -578,20 +775,37 @@ class AIProfileAnalyzer:
                 all_videos = []
 
                 for i, workflow in enumerate(top_workflows, 1):
+                    flow_task_id = workflow.get("flow_task_id")
                     signature = workflow.get("signature", "")
 
-                    # 获取完整工作流数据
-                    full_data = await self.get_workflow_full_data(user_id, signature)
+                    # 优先使用 flow_task_id 获取拓扑数据
+                    topology_data = None
+                    if flow_task_id:
+                        topology_data = await self.get_workflow_topology_data(flow_task_id)
+
+                    # 如果没有 flow_task_id 或查询失败，回退到签名匹配
+                    if not topology_data and signature:
+                        full_data = await self.get_workflow_full_data(user_id, signature)
+                        if full_data:
+                            # 转换为拓扑数据格式
+                            topology_data = {
+                                "nodes": full_data.get("nodes", []),
+                                "edges": full_data.get("edges", [])
+                            }
 
                     # 格式化工作流信息
-                    workflow_text = self._format_workflow_for_prompt(i, workflow, full_data)
+                    workflow_text = self._format_workflow_for_prompt(i, workflow, topology_data)
                     workflows_text_parts.append(workflow_text)
 
-                    # 收集媒体 URL
-                    if full_data:
-                        media = self._extract_media_urls(full_data.get("nodes", []))
-                        all_images.extend(media["images"])
-                        all_videos.extend(media["videos"])
+                    # 收集媒体 URL（从原始节点数据中提取）
+                    if topology_data:
+                        # 需要从原始数据提取媒体，因为拓扑数据可能已过滤
+                        if flow_task_id:
+                            raw_data = await self.get_workflow_full_data(user_id, signature)
+                            if raw_data:
+                                media = self._extract_media_urls(raw_data.get("nodes", []))
+                                all_images.extend(media["images"])
+                                all_videos.extend(media["videos"])
 
                 # 构建完整 prompt
                 prompt = ANALYSIS_PROMPT.format(
