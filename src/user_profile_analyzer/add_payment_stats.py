@@ -59,7 +59,7 @@ class PaymentStatsUpdater:
 
         # 集合引用
         self.user_collection = self.db["user"]
-        self.order_collection = self.db["order"]
+        self.payments_v2_collection = self.db["payments_v2"]
         self.profile_collection = self.db["user_workflow_profile"]
 
         # 统计
@@ -78,13 +78,13 @@ class PaymentStatsUpdater:
         return None
 
     async def get_payment_stats(self, user_id: str) -> dict:
-        """统计用户的 paid 和 unpaid 订单数量"""
+        """统计用户的 paid 和 unpaid 支付记录数量（基于 payments_v2）"""
         pipeline = [
-            {"$match": {"user_id": user_id, "pay_status": {"$in": ["paid", "unpaid"]}}},
-            {"$group": {"_id": "$pay_status", "count": {"$sum": 1}}}
+            {"$match": {"user_id": user_id, "payment_status": {"$in": ["paid", "unpaid"]}}},
+            {"$group": {"_id": "$payment_status", "count": {"$sum": 1}}}
         ]
 
-        cursor = self.order_collection.aggregate(pipeline)
+        cursor = self.payments_v2_collection.aggregate(pipeline)
         results = await cursor.to_list(length=None)
 
         stats = {"paid_count": 0, "unpaid_count": 0}
@@ -95,6 +95,19 @@ class PaymentStatsUpdater:
                 stats["unpaid_count"] = item["count"]
 
         return stats
+
+    async def get_total_paid_amount_usd(self, user_id: str) -> float:
+        """统计用户已支付总金额（单位：美元），基于 payments_v2"""
+        pipeline = [
+            {"$match": {"user_id": user_id, "payment_status": "paid"}},
+            {"$group": {"_id": None, "total_paid_cents": {"$sum": "$amount"}}},
+        ]
+        cursor = self.payments_v2_collection.aggregate(pipeline)
+        results = await cursor.to_list(length=1)
+        if results:
+            total_paid_cents = int(results[0].get("total_paid_cents", 0) or 0)
+            return round(total_paid_cents / 100, 2)
+        return 0.0
 
     async def update_user_payment_stats(self, profile: dict) -> str:
         """更新单个用户的付费统计"""
@@ -114,6 +127,7 @@ class PaymentStatsUpdater:
 
             # 2. 统计付费数据
             payment_stats = await self.get_payment_stats(user_id)
+            total_paid_usd = await self.get_total_paid_amount_usd(user_id)
 
             # 3. 计算付费状态
             is_paid_user = payment_stats["paid_count"] > 0
@@ -121,6 +135,7 @@ class PaymentStatsUpdater:
 
             # 4. 更新 user_workflow_profile
             update_data = {
+                "stats.total_paid_usd": total_paid_usd,
                 "payment_stats": {
                     "paid_count": payment_stats["paid_count"],
                     "unpaid_count": payment_stats["unpaid_count"],
