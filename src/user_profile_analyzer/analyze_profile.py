@@ -59,8 +59,9 @@ def load_env():
 ANALYSIS_PROMPT = """你是一个用户行为分析专家，专注于理解用户的真实使用意图和商业价值。请分析以下用户在AI创作平台上运行的工作流，判断每个工作流的目的，并对用户进行精准分类。
 
 ## 用户基本信息
-- 30天运行次数：{total_runs_30d}
-- 30天活跃天数：{active_days_30d}
+- 统计周期：2024年10月1日 - 2025年1月27日
+- 总运行次数：{total_runs}
+- 活跃天数：{active_days}
 
 ## 用户 Top {workflow_count} 工作流
 以下是用户运行最多的工作流，请仔细分析每个工作流的节点组合、输入内容、图片素材，理解用户的真实使用意图。
@@ -278,8 +279,9 @@ class AIProfileAnalyzer:
         self.client = genai.Client(api_key=gemini_api_key)
         self.model_name = 'gemini-2.0-flash'
 
-        # 配置
-        self.days_range = 30
+        # 配置 - 时间范围从2024年10月1日到2025年1月27日
+        self.start_date = datetime(2024, 10, 1)
+        self.end_date = datetime(2025, 1, 27, 23, 59, 59)
         self.top_n = 10  # Top 10 工作流
         self.concurrency = concurrency
         self.semaphore = asyncio.Semaphore(concurrency)
@@ -325,13 +327,11 @@ class AIProfileAnalyzer:
 
         通过签名匹配找到对应的 flow_task
         """
-        cutoff_date = datetime.now() - timedelta(days=self.days_range)
-
-        # 查找该用户最近30天的任务，找到签名匹配的
+        # 查找该用户在指定时间范围内的任务，找到签名匹配的
         cursor = self.flow_task_collection.find(
             {
                 "user_id": user_id,
-                "created_at": {"$gte": cutoff_date},
+                "created_at": {"$gte": self.start_date, "$lte": self.end_date},
                 "status": "success"
             },
             {
@@ -595,8 +595,8 @@ class AIProfileAnalyzer:
 
                 # 构建完整 prompt
                 prompt = ANALYSIS_PROMPT.format(
-                    total_runs_30d=stats.get("total_runs_30d", 0),
-                    active_days_30d=stats.get("active_days_30d", 0),
+                    total_runs=stats.get("total_runs_30d", 0),
+                    active_days=stats.get("active_days_30d", 0),
                     workflow_count=len(top_workflows),
                     workflows_text="\n".join(workflows_text_parts)
                 )
