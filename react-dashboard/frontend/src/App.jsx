@@ -11,7 +11,7 @@ import {
   PlayCircleTwoTone, CheckCircleTwoTone, MenuFoldOutlined, MenuUnfoldOutlined
 } from '@ant-design/icons';
 import { getUsers, getStats, getFilters, getUser } from './services/api';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const { RangePicker } = DatePicker;
 
@@ -436,76 +436,73 @@ const App = () => {
                     </Card>
                   </Col>
 
-                  {/* 2. Payment Rate Chart */}
+                  {/* 2. Payment Rate Chart (Line) */}
                   <Col span={8}>
                     <Card title="Payment Conversion Rate" style={{ height: 400 }}>
                       {stats.payment_stats && (
                         <ResponsiveContainer width="100%" height={330}>
-                          <BarChart
-                            layout="vertical"
+                          <LineChart
                             data={Object.entries(stats.payment_stats)
-                              .map(([name, data]) => ({ name, rate: data.rate, paid: data.paid, total: data.total }))
+                              .map(([name, data]) => ({ name, rate: data.rate }))
                               .sort((a, b) => b.rate - a.rate)
                             }
-                            margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                            margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" unit="%" domain={[0, 100]} />
-                            <YAxis type="category" dataKey="name" width={80} style={{ fontSize: '10px' }} />
-                            <Tooltip
-                              formatter={(value, name, props) => {
-                                if (name === 'rate') return [`${value}%`, 'Conversion Rate'];
-                              }}
-                              content={({ active, payload, label }) => {
-                                if (active && payload && payload.length) {
-                                  const data = payload[0].payload;
-                                  return (
-                                    <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc' }}>
-                                      <p style={{ fontWeight: 'bold' }}>{label}</p>
-                                      <p style={{ color: '#8884d8' }}>Rate: {data.rate}%</p>
-                                      <p>Paid: {data.paid} / {data.total}</p>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              }}
-                            />
-                            <Bar dataKey="rate" fill="#8884d8" name="Conversion Rate">
-                              {
-                                Object.entries(stats.payment_stats)
-                                  .map(([name, data]) => ({ name, rate: data.rate }))
-                                  .sort((a, b) => b.rate - a.rate)
-                                  .map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.name === globalCategory ? '#722ed1' : '#8884d8'} />
-                                  ))
-                              }
-                            </Bar>
-                          </BarChart>
+                            <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
+                            <YAxis unit="%" />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="rate" stroke="#8884d8" name="Conversion Rate" strokeWidth={2} />
+                          </LineChart>
                         </ResponsiveContainer>
                       )}
                     </Card>
                   </Col>
 
-                  {/* 3. Top Industries (Filtered by Pie) */}
+                  {/* 3. Payment Intent Rate Chart (Line) */}
                   <Col span={8}>
-                    <Card title={globalCategory ? `Top Industries in ${globalCategory}` : "Top Industries (All)"} style={{ height: 400 }}>
-                      {stats.industries && (
+                    <Card title="Payment Intent Rate" style={{ height: 400 }}>
+                      {stats.payment_stats && (
                         <ResponsiveContainer width="100%" height={330}>
-                          <BarChart
-                            data={Object.entries(stats.industries).slice(0, 10).map(([name, value]) => ({ name, value }))}
-                            layout="vertical"
-                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          <LineChart
+                            data={Object.entries(stats.payment_stats)
+                              .map(([name, data]) => ({ name, rate: data.intent_rate }))
+                              .sort((a, b) => b.rate - a.rate)
+                            }
+                            margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" />
-                            <YAxis type="category" dataKey="name" width={100} style={{ fontSize: '10px' }} />
+                            <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
+                            <YAxis unit="%" />
                             <Tooltip />
-                            <Bar dataKey="value" fill="#82ca9d" />
-                          </BarChart>
+                            <Line type="monotone" dataKey="rate" stroke="#82ca9d" name="Intent Rate" strokeWidth={2} />
+                          </LineChart>
                         </ResponsiveContainer>
                       )}
                     </Card>
                   </Col>
+                </Row>
+                
+                {/* Second Row: Top Industries */}
+                <Row gutter={16} style={{ marginBottom: '24px' }}>
+                     <Col span={24}>
+                        <Card title={globalCategory ? `Top Industries in ${globalCategory}` : "Top Industries (All)"} style={{ height: 400 }}>
+                          {stats.industries && (
+                            <ResponsiveContainer width="100%" height={330}>
+                              <BarChart
+                                data={Object.entries(stats.industries).slice(0, 15).map(([name, value]) => ({ name, value }))}
+                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" interval={0} angle={-30} textAnchor="end" height={60} />
+                                <YAxis />
+                                <Tooltip />
+                                <Bar dataKey="value" fill="#82ca9d" />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Card>
+                      </Col>
                 </Row>
               </Spin>
             )}

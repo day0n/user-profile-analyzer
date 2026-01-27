@@ -285,7 +285,8 @@ async def get_stats(
                 "$group": {
                     "_id": "$ai_profile.user_subcategory",
                     "total": {"$sum": 1},
-                    "paid": {"$sum": {"$cond": [{"$eq": ["$payment_stats.is_paid_user", True]}, 1, 0]}}
+                    "paid": {"$sum": {"$cond": [{"$eq": ["$payment_stats.is_paid_user", True]}, 1, 0]}},
+                    "intent": {"$sum": {"$cond": [{"$eq": ["$payment_stats.has_payment_intent", True]}, 1, 0]}}
                 }
             }
         ]
@@ -297,7 +298,8 @@ async def get_stats(
                 "$group": {
                     "_id": "$ai_profile.user_category",
                     "total": {"$sum": 1},
-                    "paid": {"$sum": {"$cond": [{"$eq": ["$payment_stats.is_paid_user", True]}, 1, 0]}}
+                    "paid": {"$sum": {"$cond": [{"$eq": ["$payment_stats.is_paid_user", True]}, 1, 0]}},
+                    "intent": {"$sum": {"$cond": [{"$eq": ["$payment_stats.has_payment_intent", True]}, 1, 0]}}
                 }
             }
         ]
@@ -323,8 +325,10 @@ async def get_stats(
         key = item["_id"] or "Unknown"
         total = item["total"]
         paid = item["paid"]
+        intent = item.get("intent", 0)
         rate = round((paid / total) * 100, 1) if total > 0 else 0
-        payment_stats[key] = {"total": total, "paid": paid, "rate": rate}
+        intent_rate = round((intent / total) * 100, 1) if total > 0 else 0
+        payment_stats[key] = {"total": total, "paid": paid, "rate": rate, "intent": intent, "intent_rate": intent_rate}
     
     high_potential = await collection.count_documents({**params_match, "ai_profile.business_potential.score": {"$gte": 7}})
     total_users = await collection.count_documents(params_match)
