@@ -174,9 +174,10 @@ const App = () => {
       render: (text) => <Text strong style={{ color: '#1890ff' }}>{text}</Text>,
     },
     {
-      title: 'Industry',
-      dataIndex: ['ai_profile', 'positioning', 'industry'],
-      key: 'industry',
+      title: 'Subcategory',
+      dataIndex: ['ai_profile', 'user_subcategory'],
+      key: 'user_subcategory',
+      render: (text) => text || 'N/A'
     },
     {
       title: 'Platform',
