@@ -85,15 +85,17 @@ ANALYSIS_PROMPT = """你是工作流结构分析助手，专注于理解用户�
   - label：节点名称（前端展示名）
   - isInputNode：是否为输入型节点
   - data：节点配置数据
-    - 输入型节点 data 中会保留用户输入的关键字段（非常重要）：
-      - inputText：用户输入的文本 prompt
-      - imageBase64：用户上传图片（base64或URL）
-      - inputVideo：用户输入视频
-      - inputAudio：用户输入音频
+    - 输入型节点 data 中的字段：
+      - inputText：用户输入的文本 prompt（完整保留）
+      - imageBase64：如果是 URL 则保留，图片已通过多模态附加给你
+      - inputVideo：视频 URL（如果存在），但视频未附加（当前模型不支持视频多模态）
+      - inputAudio：音频 URL（如果存在），但音频未附加（当前模型不支持音频多模态）
+      - hasImageBase64：标记原始数据有 base64 图片，已通过回查附加
+      - hasVideoBase64：标记原始数据有 base64 视频，但未附加
+      - hasAudioBase64：标记原始数据有 base64 音频，但未附加
       - selectedModels：用户选的模型列表
       - selectedVoice：用户选的语音
       - aspectRatio：比例
-      - 以及其他配置字段（除 results/model_options 已移除）
     - 非输入型节点 data 只保留关键字段：
       - prompt（inputText）
       - selectedModels
@@ -102,6 +104,11 @@ ANALYSIS_PROMPT = """你是工作流结构分析助手，专注于理解用户�
 - edges：连线列表
   - source/target：连接的节点
   - sourceHandle/targetHandle：连接口，反映数据流通道
+
+## 【媒体附加说明】
+- **图片**：已通过多模态附加，你可以直接看到图片内容
+- **视频**：URL 存在但未附加，当前模型不支持视频多模态，请根据文本描述和工作流结构推断
+- **音频**：URL 存在但未附加，当前模型不支持音频多模态，请根据文本描述和工作流结构推断
 
 ## 【分析规则】
 1) 先识别所有输入型节点（isInputNode=true）及其用户输入内容。
@@ -470,59 +477,78 @@ class AIProfileAnalyzer:
             return results[0]
         return None
 
-    async def get_workflow_full_data(self, user_id: str, signature: str) -> Optional[Dict]:
+    async def get_raw_media_from_flow_task(self, flow_task_id: str) -> Dict[str, List[str]]:
         """
-        获取工作流的完整数据（包含节点和连接关系）
+        通过 flow_task_id 从原始 flow_task 中提取媒体 URL
 
-        通过签名匹配找到对应的 flow_task
+        用于当 topology 中只有 hasImageBase64/hasVideoBase64 标记时，
+        回查原始数据获取实际的媒体 URL
         """
-        # 查找该用户在指定时间范围内的任务，找到签名匹配的
-        cursor = self.flow_task_collection.find(
-            {
-                "user_id": user_id,
-                "created_at": {"$gte": self.start_date, "$lte": self.end_date},
-                "status": "success"
-            },
-            {
-                "nodes": 1,
-                "edges": 1,
-                "created_at": 1
-            }
-        ).sort("created_at", -1).limit(100)
+        if not flow_task_id:
+            return {"images": [], "videos": [], "audios": []}
 
-        async for task in cursor:
-            nodes = task.get("nodes", [])
-            task_signature = self._generate_signature(nodes)
-            if task_signature == signature:
-                return {
-                    "nodes": nodes,
-                    "edges": task.get("edges", []),
-                    "created_at": task.get("created_at")
-                }
-
-        return None
-
-    def _generate_signature(self, nodes: List[Dict]) -> str:
-        """生成工作流签名"""
-        if not nodes:
-            return "empty"
-
-        from collections import defaultdict
-        type_counts = defaultdict(int)
-        for node in nodes:
-            node_type = node.get("type", "unknown")
-            type_counts[node_type] += 1
-
-        signature = ",".join(
-            f"{k}:{v}" for k, v in sorted(type_counts.items())
+        task = await self.flow_task_collection.find_one(
+            {"flow_task_id": flow_task_id},
+            {"nodes": 1}
         )
-        return signature
+
+        if not task:
+            return {"images": [], "videos": [], "audios": []}
+
+        images = []
+        videos = []
+        audios = []
+
+        for node in task.get("nodes", []):
+            data = node.get("data", {})
+
+            # 提取图片 URL
+            img_url = data.get("imageBase64", "")
+            if img_url and isinstance(img_url, str) and img_url.startswith("http"):
+                images.append(img_url)
+
+            # 提取视频 URL
+            for key in ["inputVideo", "videoBase64", "videoUrl", "video_url"]:
+                video_url = data.get(key, "")
+                if video_url and isinstance(video_url, str) and video_url.startswith("http"):
+                    if video_url not in videos:
+                        videos.append(video_url)
+
+            # 提取音频 URL
+            for key in ["inputAudio", "audioBase64", "audioUrl", "audio_url"]:
+                audio_url = data.get(key, "")
+                if audio_url and isinstance(audio_url, str) and audio_url.startswith("http"):
+                    if audio_url not in audios:
+                        audios.append(audio_url)
+
+            # 遍历其他字段查找可能的媒体 URL
+            for key, value in data.items():
+                if isinstance(value, str) and value.startswith("http"):
+                    if any(ext in value.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                        if value not in images:
+                            images.append(value)
+                    elif any(ext in value.lower() for ext in ['.mp4', '.mov', '.avi', '.webm']):
+                        if value not in videos:
+                            videos.append(value)
+                    elif any(ext in value.lower() for ext in ['.mp3', '.wav', '.m4a', '.aac']):
+                        if value not in audios:
+                            audios.append(value)
+                    elif 'resource.opencreator.io/images' in value:
+                        if value not in images:
+                            images.append(value)
+
+        return {
+            "images": images,
+            "videos": videos,
+            "audios": audios
+        }
 
     def _extract_media_urls(self, nodes: List[Dict]) -> Dict[str, List[str]]:
         """从节点中提取图片和视频 URL"""
         images = []
         videos = []
         texts = []
+        has_base64_media = False  # 标记是否有 base64 媒体需要回查
 
         for node in nodes:
             node_type = node.get("type", "")
@@ -532,15 +558,21 @@ class AIProfileAnalyzer:
             # 合并 data 和 inputs
             all_data = {**data, **inputs}
 
-            # 提取图片 - 检查 imageBase64 字段（实际存的是 URL）
+            # 检查是否有 base64 媒体标记（需要通过 flow_task_id 回查）
+            if all_data.get("hasImageBase64") or all_data.get("hasVideoBase64") or all_data.get("hasAudioBase64"):
+                has_base64_media = True
+
+            # 提取图片 URL
             img_url = all_data.get("imageBase64", "")
             if img_url and isinstance(img_url, str) and img_url.startswith("http"):
                 images.append(img_url)
 
-            # 提取视频 URL
-            video_url = all_data.get("videoUrl", "") or all_data.get("video_url", "") or all_data.get("videoBase64", "")
-            if video_url and isinstance(video_url, str) and video_url.startswith("http"):
-                videos.append(video_url)
+            # 提取视频 URL - 检查多个可能的字段
+            for key in ["inputVideo", "videoBase64", "videoUrl", "video_url"]:
+                video_url = all_data.get(key, "")
+                if video_url and isinstance(video_url, str) and video_url.startswith("http"):
+                    if video_url not in videos:
+                        videos.append(video_url)
 
             # 提取文本输入
             input_text = all_data.get("inputText", "") or all_data.get("text", "") or all_data.get("prompt", "")
@@ -566,7 +598,8 @@ class AIProfileAnalyzer:
         return {
             "images": images[:20],  # 限制每个工作流最多20张图片
             "videos": videos[:10],  # 限制每个工作流最多10个视频
-            "texts": texts
+            "texts": texts,
+            "has_base64_media": has_base64_media
         }
 
     def _format_workflow_for_prompt(self, rank: int, workflow: Dict, topology_data: Optional[Dict]) -> str:
@@ -619,24 +652,39 @@ class AIProfileAnalyzer:
                         if value is None or value == "" or key in ["label"]:
                             continue
 
-                        # 图片/视频/音频字段：标记为已附加，通过多模态传递
-                        if key in ["imageBase64", "inputVideo", "inputAudio", "videoBase64", "audioBase64"]:
+                        # 图片字段：如果是 URL，标记为已附加（通过多模态传递）
+                        if key == "imageBase64":
                             if isinstance(value, str) and value.startswith("http"):
-                                lines.append(f"    {key}: [媒体已附加，URL: {value[:100]}...]")
-                                if "image" in key.lower():
-                                    nodes_with_images.append(node_id)
-                            elif isinstance(value, str) and value.startswith("data:"):
-                                lines.append(f"    {key}: [媒体已附加，base64数据]")
-                                if "image" in key.lower():
-                                    nodes_with_images.append(node_id)
+                                lines.append(f"    {key}: [图片已通过多模态附加]")
+                                nodes_with_images.append(node_id)
                             continue
 
-                        # hasImage/hasVideo/hasAudio 标记
-                        if key in ["hasImage", "hasVideo", "hasAudio"]:
+                        # 视频/音频字段：标记为未附加（当前模型不支持）
+                        if key in ["inputVideo", "videoBase64"]:
+                            if isinstance(value, str) and value.startswith("http"):
+                                lines.append(f"    {key}: [视频URL存在但未附加，当前模型不支持视频多模态]")
+                            continue
+
+                        if key in ["inputAudio", "audioBase64"]:
+                            if isinstance(value, str) and value.startswith("http"):
+                                lines.append(f"    {key}: [音频URL存在但未附加，当前模型不支持音频多模态]")
+                            continue
+
+                        # hasXxxBase64 标记：表示原始数据有 base64 媒体
+                        if key == "hasImageBase64":
                             if value:
-                                lines.append(f"    {key}: {value}")
-                                if key == "hasImage":
-                                    nodes_with_images.append(node_id)
+                                lines.append(f"    {key}: True [图片已通过 flow_task_id 回查并附加]")
+                                nodes_with_images.append(node_id)
+                            continue
+
+                        if key == "hasVideoBase64":
+                            if value:
+                                lines.append(f"    {key}: True [视频存在但未附加，当前模型不支持]")
+                            continue
+
+                        if key == "hasAudioBase64":
+                            if value:
+                                lines.append(f"    {key}: True [音频存在但未附加，当前模型不支持]")
                             continue
 
                         # 文本字段：不截断，完整输出
@@ -815,35 +863,35 @@ class AIProfileAnalyzer:
                 all_videos = []
 
                 for i, workflow in enumerate(top_workflows, 1):
+                    flow_task_id = workflow.get("flow_task_id")
+
                     # 直接使用 top_workflows 中保存的 topology 数据
                     topology_data = workflow.get("topology")
 
-                    # 如果没有 topology 数据（旧数据），尝试通过 flow_task_id 查询
-                    if not topology_data:
-                        flow_task_id = workflow.get("flow_task_id")
-                        signature = workflow.get("signature", "")
-
-                        if flow_task_id:
-                            topology_data = await self.get_workflow_topology_data(flow_task_id)
-
-                        # 如果还是没有，回退到签名匹配
-                        if not topology_data and signature:
-                            full_data = await self.get_workflow_full_data(user_id, signature)
-                            if full_data:
-                                topology_data = {
-                                    "nodes": full_data.get("nodes", []),
-                                    "edges": full_data.get("edges", [])
-                                }
+                    # 如果没有 topology 数据（旧数据），通过 flow_task_id 查询
+                    if not topology_data and flow_task_id:
+                        topology_data = await self.get_workflow_topology_data(flow_task_id)
 
                     # 格式化工作流信息
                     workflow_text = self._format_workflow_for_prompt(i, workflow, topology_data)
                     workflows_text_parts.append(workflow_text)
 
-                    # 收集媒体 URL（从拓扑数据中提取）
+                    # 收集媒体 URL
                     if topology_data:
                         media = self._extract_media_urls(topology_data.get("nodes", []))
                         all_images.extend(media["images"])
                         all_videos.extend(media["videos"])
+
+                        # 如果有 base64 媒体标记，通过 flow_task_id 回查原始数据获取媒体
+                        if media.get("has_base64_media") and flow_task_id:
+                            raw_media = await self.get_raw_media_from_flow_task(flow_task_id)
+                            # 添加从原始数据获取的媒体（去重）
+                            for img in raw_media["images"]:
+                                if img not in all_images:
+                                    all_images.append(img)
+                            for vid in raw_media["videos"]:
+                                if vid not in all_videos:
+                                    all_videos.append(vid)
 
                 # 构建完整 prompt
                 prompt = ANALYSIS_PROMPT.format(

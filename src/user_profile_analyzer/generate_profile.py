@@ -114,9 +114,9 @@ class UserWorkflowProfileGenerator:
         清理节点数据，用于保存到数据库
 
         规则：
-        - 输入型节点保留 data，但剔除 results/model_options 和大字段（base64/视频/音频）
+        - 输入型节点保留 data，但剔除 results/model_options
+        - 媒体字段：如果是 URL 则保留，如果是 base64 则删除并标记 hasXxx
         - 非输入节点只保留关键字段（prompt/模型/语音/比例）
-        - 大字段（imageBase64/inputVideo/inputAudio）在分析时通过 flow_task_id 拉取
         """
         node_type = node.get("type", "unknown")
         node_data = node.get("data", {})
@@ -128,22 +128,36 @@ class UserWorkflowProfileGenerator:
             "isInputNode": node_type in self.INPUT_NODE_TYPES,
         }
 
-        # 需要排除的大字段（避免超过 16MB 文档限制）
-        large_fields = ["results", "model_options", "imageBase64", "inputVideo", "inputAudio", "videoBase64", "audioBase64"]
+        # 需要排除的字段
+        exclude_fields = ["results", "model_options"]
 
         if node_type in self.INPUT_NODE_TYPES:
-            # 输入节点：保留 data，但剔除大字段
-            cleaned_data = {
-                k: v for k, v in node_data.items()
-                if k not in large_fields
-            }
-            # 标记是否有媒体数据（供分析时知道需要拉取）
-            if node_data.get("imageBase64"):
-                cleaned_data["hasImage"] = True
-            if node_data.get("inputVideo") or node_data.get("videoBase64"):
-                cleaned_data["hasVideo"] = True
-            if node_data.get("inputAudio") or node_data.get("audioBase64"):
-                cleaned_data["hasAudio"] = True
+            # 输入节点：保留 data，但处理大字段
+            cleaned_data = {}
+
+            for k, v in node_data.items():
+                if k in exclude_fields:
+                    continue
+
+                # 处理媒体字段
+                if k in ["imageBase64", "inputVideo", "inputAudio", "videoBase64", "audioBase64"]:
+                    if isinstance(v, str):
+                        # 如果是 URL，保留
+                        if v.startswith("http"):
+                            cleaned_data[k] = v
+                        # 如果是 base64，只标记不保留
+                        elif v.startswith("data:") or len(v) > 1000:
+                            if "image" in k.lower():
+                                cleaned_data["hasImageBase64"] = True
+                            elif "video" in k.lower():
+                                cleaned_data["hasVideoBase64"] = True
+                            elif "audio" in k.lower():
+                                cleaned_data["hasAudioBase64"] = True
+                    continue
+
+                # 其他字段直接保留
+                cleaned_data[k] = v
+
             cleaned_node["data"] = cleaned_data
         else:
             # 非输入节点：只保留关键字段
