@@ -87,12 +87,12 @@ ANALYSIS_PROMPT = """你是工作流结构分析助手，专注于理解用户�
   - data：节点配置数据
     - 输入型节点 data 中的字段：
       - inputText：用户输入的文本 prompt（完整保留）
-      - imageBase64：如果是 URL 则保留，图片已通过多模态附加给你
-      - inputVideo：视频 URL（如果存在），但视频未附加（当前模型不支持视频多模态）
-      - inputAudio：音频 URL（如果存在），但音频未附加（当前模型不支持音频多模态）
-      - hasImageBase64：标记原始数据有 base64 图片，已通过回查附加
-      - hasVideoBase64：标记原始数据有 base64 视频，但未附加
-      - hasAudioBase64：标记原始数据有 base64 音频，但未附加
+      - imageBase64：仅当原始值是 URL 时保留（图片已通过多模态附加给你）；若原始是 base64 则不保留此字段
+      - inputVideo：仅当原始值是 URL 时保留；若原始是 base64 则不保留此字段
+      - inputAudio：仅当原始值是 URL 时保留；若原始是 base64 则不保留此字段
+      - hasImageBase64：True 表示原始数据有 base64 图片（已通过 flow_task_id 回查并附加）
+      - hasVideoBase64：True 表示原始数据有 base64 视频（未附加，当前模型不支持）
+      - hasAudioBase64：True 表示原始数据有 base64 音频（未附加，当前模型不支持）
       - selectedModels：用户选的模型列表
       - selectedVoice：用户选的语音
       - aspectRatio：比例
@@ -106,9 +106,11 @@ ANALYSIS_PROMPT = """你是工作流结构分析助手，专注于理解用户�
   - sourceHandle/targetHandle：连接口，反映数据流通道
 
 ## 【媒体附加说明】
-- **图片**：已通过多模态附加，你可以直接看到图片内容
-- **视频**：URL 存在但未附加，当前模型不支持视频多模态，请根据文本描述和工作流结构推断
-- **音频**：URL 存在但未附加，当前模型不支持音频多模态，请根据文本描述和工作流结构推断
+- **图片**：
+  - 若 imageBase64 字段存在（URL），图片已通过多模态附加
+  - 若 hasImageBase64=True，图片已通过 flow_task_id 回查并附加
+- **视频**：URL 或 base64 均未附加，当前模型不支持视频多模态，请根据文本描述和工作流结构推断
+- **音频**：URL 或 base64 均未附加，当前模型不支持音频多模态，请根据文本描述和工作流结构推断
 
 ## 【分析规则】
 1) 先识别所有输入型节点（isInputNode=true）及其用户输入内容。
