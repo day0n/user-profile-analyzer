@@ -14,8 +14,8 @@ export const getUser = async (id) => {
     return data;
 };
 
-export const getStats = async () => {
-    const { data } = await api.get('/stats');
+export const getStats = async (params) => {
+    const { data } = await api.get('/stats', { params });
     return data;
 };
 

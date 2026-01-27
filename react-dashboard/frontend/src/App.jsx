@@ -2,15 +2,18 @@ import React, { useState, useEffect } from 'react';
 import {
   Layout, Table, Tag, Space, Card, Statistic, Row, Col,
   Form, Select, Slider, Button, Drawer, Typography, Descriptions,
-  List, Badge, ConfigProvider, theme
+  List, Badge, ConfigProvider, theme, DatePicker, Spin
 } from 'antd';
+import dayjs from 'dayjs';
 import {
   UserOutlined, DashboardOutlined, FilterOutlined,
   ReloadOutlined, RiseOutlined, RocketTwoTone, ArrowLeftOutlined,
-  PlayCircleTwoTone, CheckCircleTwoTone
+  PlayCircleTwoTone, CheckCircleTwoTone, MenuFoldOutlined, MenuUnfoldOutlined
 } from '@ant-design/icons';
 import { getUsers, getStats, getFilters, getUser } from './services/api';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+
+const { RangePicker } = DatePicker;
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -18,9 +21,14 @@ const { Option } = Select;
 
 const App = () => {
   // State
+  // Global State (driven by Pie Chart)
+  const [globalCategory, setGlobalCategory] = useState(null);
+  const [dateRange, setDateRange] = useState(null);
+
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [chartsLoading, setChartsLoading] = useState(false);
   const [stats, setStats] = useState(null);
   const [filterOptions, setFilterOptions] = useState({});
   const [filters, setFilters] = useState({ page: 1, limit: 10, min_score: 1 });
@@ -31,10 +39,21 @@ const App = () => {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
 
+  const [collapsed, setCollapsed] = useState(false);
+
+
+
   // Initial Load
   useEffect(() => {
     loadInitData();
   }, []);
+
+  // ... (rest of useEffects)
+
+  // ... (rest of functions)
+
+  // (This is just context, I will scroll down to render to replace Sider)
+
 
   // Reload users when filters change
   useEffect(() => {
@@ -43,6 +62,7 @@ const App = () => {
 
   const loadInitData = async () => {
     try {
+      // Initial range 2025-10-01 to 2026-01-27 as requested defaults or empty
       const [s, f] = await Promise.all([getStats(), getFilters()]);
       setStats(s);
       setFilterOptions(f);
@@ -51,10 +71,64 @@ const App = () => {
     }
   };
 
+  // Function to reload stats with date filter
+  // Function to reload stats with date and global category filter
+  // Function to reload stats with date and global category filter
+  const fetchStats = async (dates, category) => {
+    setChartsLoading(true);
+    try {
+      const params = {};
+      if (dates) {
+        params.start_date = dates[0].toISOString();
+        params.end_date = dates[1].toISOString();
+      }
+      if (category) {
+        params.category = category;
+      }
+      const s = await getStats(params);
+      setStats(s);
+    } catch (e) { console.error(e); }
+    finally { setChartsLoading(false); }
+  };
+
+  const onGlobalCategorySelect = (category) => {
+    if (globalCategory === category) {
+      // Deselect
+      setGlobalCategory(null);
+      // Reset stats to show all (respecting time)
+      fetchStats(dateRange, null);
+      // Reset table filter
+      setFilters(prev => {
+        const next = { ...prev, page: 1 };
+        delete next.category;
+        return next;
+      });
+    } else {
+      // Select
+      setGlobalCategory(category);
+      // Filter stats (industries, counts) by this category
+      fetchStats(dateRange, category);
+      // Filter table
+      setFilters(prev => ({ ...prev, category, page: 1 }));
+    }
+    // Reset subcategory view in Pie (optional, user might want to stay drilled down?)
+    // For now, let's reset subcategory view if switching major category
+    if (selectedCategory && selectedCategory !== category) setSelectedCategory(null);
+  };
+
   const fetchUserData = async () => {
     setLoading(true);
     try {
-      const data = await getUsers(filters);
+      // Pass filters including date range and global category
+      const params = { ...filters };
+      if (dateRange) {
+        params.start_date = dateRange[0].toISOString();
+        params.end_date = dateRange[1].toISOString();
+      }
+      // Global category overrides form category if present (or syncs with it)
+      if (globalCategory) params.category = globalCategory;
+
+      const data = await getUsers(params);
       setUsers(data.items);
       setTotal(data.total);
     } catch (e) {
@@ -126,18 +200,18 @@ const App = () => {
       key: 'stage',
     },
     {
-      title: 'Total Runs (30d)',
-      dataIndex: ['stats', 'total_runs_30d'],
-      key: 'stats.total_runs_30d',
+      title: 'Total Runs',
+      dataIndex: ['stats', 'total_runs'],
+      key: 'stats.total_runs',
       sorter: true,
-      render: (val) => val || 0
+      render: (val, record) => val || record.stats?.total_runs_30d || 0
     },
     {
-      title: 'Active Days (30d)',
-      dataIndex: ['stats', 'active_days_30d'],
-      key: 'stats.active_days_30d',
+      title: 'Active Days',
+      dataIndex: ['stats', 'active_days'],
+      key: 'stats.active_days',
       sorter: true,
-      render: (val) => `${val} days`
+      render: (val, record) => `${val || record.stats?.active_days_30d || 0} days`
     },
     {
       title: 'Action',
@@ -190,54 +264,88 @@ const App = () => {
           <Sider
             width={300}
             theme='light'
+            collapsible
+            collapsed={collapsed}
+            onCollapse={setCollapsed}
+            trigger={null}
+            collapsedWidth={80}
             style={{
-              padding: '24px',
+              padding: '24px 12px',
               background: 'rgba(255, 255, 255, 0.6)',
               backdropFilter: 'blur(20px)',
-              borderRight: '1px solid rgba(0,0,0,0.03)'
+              borderRight: '1px solid rgba(0,0,0,0.03)',
+              transition: 'all 0.2s'
             }}
           >
-            <Title level={4} style={{ marginBottom: 24, fontWeight: 300 }}><FilterOutlined /> Filters</Title>
-            <Form layout="vertical" onValuesChange={handleFilterChange}>
-              <Form.Item label="Min Potential Score" name="min_score" initialValue={1}>
-                <Slider min={1} max={10} marks={{ 1: '1', 5: '5', 10: '10' }} />
-              </Form.Item>
+            <div style={{ display: 'flex', justifyContent: collapsed ? 'center' : 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              {!collapsed && <Title level={4} style={{ margin: 0, fontWeight: 300 }}><FilterOutlined /> Filters</Title>}
+              <Button
+                type="text"
+                icon={collapsed ? <FilterOutlined style={{ fontSize: 18 }} /> : <MenuFoldOutlined />}
+                onClick={() => setCollapsed(!collapsed)}
+                title={collapsed ? "Expand Filters" : "Collapse Filters"}
+              />
+            </div>
 
-              <Form.Item label="User Category" name="category">
-                <Select allowClear placeholder="Select Category" style={{ width: '100%' }}>
-                  {filterOptions.categories?.map(c => <Option key={c} value={c}>{c}</Option>)}
-                </Select>
-              </Form.Item>
+            <div style={{ display: collapsed ? 'none' : 'block' }}>
+              <Form layout="vertical" onValuesChange={(changed, all) => {
+                if (changed.dateRange) {
+                  setDateRange(changed.dateRange);
+                  fetchStats(changed.dateRange, globalCategory);
+                }
+                handleFilterChange(changed);
+              }}>
+                <Form.Item label="Date Range" name="dateRange">
+                  <RangePicker style={{ width: '100%' }} />
+                </Form.Item>
 
-              <Form.Item label="Industry" name="industry">
-                <Select allowClear placeholder="Select Industry">
-                  {filterOptions.industries?.map(i => <Option key={i} value={i}>{i}</Option>)}
-                </Select>
-              </Form.Item>
+                <Form.Item label="Min Potential Score" name="min_score" initialValue={1}>
+                  <Slider min={1} max={10} marks={{ 1: '1', 5: '5', 10: '10' }} />
+                </Form.Item>
 
-              <Form.Item label="Platform" name="platform">
-                <Select allowClear placeholder="Select Platform">
-                  {filterOptions.platforms?.map(p => <Option key={p} value={p}>{p}</Option>)}
-                </Select>
-              </Form.Item>
+                <Form.Item label="User Category" name="category">
+                  <Select allowClear placeholder="Select Category" style={{ width: '100%' }}>
+                    {filterOptions.categories?.map(c => <Option key={c} value={c}>{c}</Option>)}
+                  </Select>
+                </Form.Item>
 
-              <Form.Item label="Stage" name="stage">
-                <Select allowClear placeholder="Select Stage">
-                  {filterOptions.stages?.map(s => <Option key={s} value={s}>{s}</Option>)}
-                </Select>
-              </Form.Item>
-            </Form>
+                <Form.Item label="Industry" name="industry">
+                  <Select allowClear placeholder="Select Industry">
+                    {filterOptions.industries?.map(i => <Option key={i} value={i}>{i}</Option>)}
+                  </Select>
+                </Form.Item>
+
+                <Form.Item label="Platform" name="platform">
+                  <Select allowClear placeholder="Select Platform">
+                    {filterOptions.platforms?.map(p => <Option key={p} value={p}>{p}</Option>)}
+                  </Select>
+                </Form.Item>
+
+                <Form.Item label="Stage" name="stage">
+                  <Select allowClear placeholder="Select Stage">
+                    {filterOptions.stages?.map(s => <Option key={s} value={s}>{s}</Option>)}
+                  </Select>
+                </Form.Item>
+              </Form>
+            </div>
+            {collapsed && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, marginTop: 24 }}>
+                <Tooltip title="Expand to filter" placement="right">
+                  <FilterOutlined style={{ fontSize: 24, color: '#bfbfbf' }} />
+                </Tooltip>
+              </div>
+            )}
           </Sider>
 
           <Content style={{ padding: '24px', overflowY: 'auto', background: '#f5f7fa' }}>
             {/* Dashboard Stats */}
             {stats && (
-              <>
+              <Spin spinning={chartsLoading}>
                 <Row gutter={16} style={{ marginBottom: '24px' }}>
                   <Col span={6}>
                     <Card hoverable>
                       <Statistic
-                        title="Total Users"
+                        title={globalCategory ? `Total Users (${globalCategory})` : "Total Users"}
                         value={stats.total_users}
                         prefix={<UserOutlined style={{ color: '#1890ff' }} />}
                       />
@@ -266,21 +374,22 @@ const App = () => {
 
                 {/* Analytical Charts */}
                 <Row gutter={16} style={{ marginBottom: '24px' }}>
-                  <Col span={12}>
+                  {/* 1. Category Pie Chart (The Controller) */}
+                  <Col span={8}>
                     <Card
                       title={
                         selectedCategory ? (
                           <Space>
-                            <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => setSelectedCategory(null)} />
+                            <Button type="text" icon={<ArrowLeftOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedCategory(null); }} />
                             {selectedCategory}
                           </Space>
                         ) : "User Category Distribution"
                       }
-                      extra={!selectedCategory && <Text type="secondary" style={{ fontSize: 12 }}>Click to drill-down</Text>}
-                      style={{ height: 350 }}
+                      extra={!selectedCategory && <Text type="secondary" style={{ fontSize: 12 }}>Click Slice to Filter</Text>}
+                      style={{ height: 400, border: globalCategory ? '2px solid #722ed1' : undefined }}
                     >
                       {stats.categories ? (
-                        <ResponsiveContainer width="100%" height={280}>
+                        <ResponsiveContainer width="100%" height={330}>
                           <PieChart>
                             <Pie
                               data={
@@ -295,9 +404,15 @@ const App = () => {
                               fill="#1890ff"
                               paddingAngle={5}
                               dataKey="value"
-                              label
+                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                               onClick={(data) => {
-                                if (!selectedCategory) setSelectedCategory(data.name);
+                                // If drilldown is active, don't trigger global filter
+                                if (!selectedCategory) {
+                                  // Trigger Global Filter
+                                  onGlobalCategorySelect(data.name);
+                                  // Also toggle drilldown visibility locally
+                                  setSelectedCategory(data.name);
+                                }
                               }}
                               style={{ cursor: !selectedCategory ? 'pointer' : 'default' }}
                             >
@@ -305,28 +420,85 @@ const App = () => {
                                 ? Object.entries(stats.categories[selectedCategory].subcategories)
                                 : Object.entries(stats.categories)
                               ).map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#EFDB50', '#ff85c0'][index % 7]} />
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#EFDB50', '#ff85c0'][index % 7]}
+                                  stroke={globalCategory === entry[0] ? '#722ed1' : '#fff'}
+                                  strokeWidth={globalCategory === entry[0] ? 3 : 1}
+                                />
                               ))}
                             </Pie>
                             <Tooltip />
-                            <Legend />
+                            <Legend wrapperStyle={{ fontSize: '10px' }} />
                           </PieChart>
                         </ResponsiveContainer>
                       ) : <Text type="secondary">No category data yet.</Text>}
                     </Card>
                   </Col>
-                  <Col span={12}>
-                    <Card title="Top Industries" style={{ height: 350 }}>
-                      {stats.industries && (
-                        <ResponsiveContainer width="100%" height={280}>
+
+                  {/* 2. Payment Rate Chart */}
+                  <Col span={8}>
+                    <Card title="Payment Conversion Rate" style={{ height: 400 }}>
+                      {stats.payment_stats && (
+                        <ResponsiveContainer width="100%" height={330}>
                           <BarChart
-                            data={Object.entries(stats.industries).slice(0, 5).map(([name, value]) => ({ name, value }))}
+                            layout="vertical"
+                            data={Object.entries(stats.payment_stats)
+                              .map(([name, data]) => ({ name, rate: data.rate, paid: data.paid, total: data.total }))
+                              .sort((a, b) => b.rate - a.rate)
+                            }
+                            margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" unit="%" domain={[0, 100]} />
+                            <YAxis type="category" dataKey="name" width={80} style={{ fontSize: '10px' }} />
+                            <Tooltip
+                              formatter={(value, name, props) => {
+                                if (name === 'rate') return [`${value}%`, 'Conversion Rate'];
+                              }}
+                              content={({ active, payload, label }) => {
+                                if (active && payload && payload.length) {
+                                  const data = payload[0].payload;
+                                  return (
+                                    <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc' }}>
+                                      <p style={{ fontWeight: 'bold' }}>{label}</p>
+                                      <p style={{ color: '#8884d8' }}>Rate: {data.rate}%</p>
+                                      <p>Paid: {data.paid} / {data.total}</p>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                            <Bar dataKey="rate" fill="#8884d8" name="Conversion Rate">
+                              {
+                                Object.entries(stats.payment_stats)
+                                  .map(([name, data]) => ({ name, rate: data.rate }))
+                                  .sort((a, b) => b.rate - a.rate)
+                                  .map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.name === globalCategory ? '#722ed1' : '#8884d8'} />
+                                  ))
+                              }
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </Card>
+                  </Col>
+
+                  {/* 3. Top Industries (Filtered by Pie) */}
+                  <Col span={8}>
+                    <Card title={globalCategory ? `Top Industries in ${globalCategory}` : "Top Industries (All)"} style={{ height: 400 }}>
+                      {stats.industries && (
+                        <ResponsiveContainer width="100%" height={330}>
+                          <BarChart
+                            data={Object.entries(stats.industries).slice(0, 10).map(([name, value]) => ({ name, value }))}
                             layout="vertical"
                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis type="number" />
-                            <YAxis type="category" dataKey="name" width={100} />
+                            <YAxis type="category" dataKey="name" width={100} style={{ fontSize: '10px' }} />
                             <Tooltip />
                             <Bar dataKey="value" fill="#82ca9d" />
                           </BarChart>
@@ -335,7 +507,7 @@ const App = () => {
                     </Card>
                   </Col>
                 </Row>
-              </>
+              </Spin>
             )}
 
             <Card title="User List" extra={<Button icon={<ReloadOutlined />} onClick={fetchUserData}>Refresh</Button>}>
@@ -372,6 +544,13 @@ const App = () => {
                 <Descriptions.Item label="User Type">{selectedUser.ai_profile?.user_type}</Descriptions.Item>
                 <Descriptions.Item label="Primary Purpose">{selectedUser.ai_profile?.primary_purpose}</Descriptions.Item>
                 <Descriptions.Item label="Activity Level">{selectedUser.ai_profile?.activity_level}</Descriptions.Item>
+                <Descriptions.Item label="Content Focus">
+                  {selectedUser.ai_profile?.content_focus?.map(t => <Tag key={t}>{t}</Tag>)}
+                </Descriptions.Item>
+                <Descriptions.Item label="Payment Status">
+                  {selectedUser.payment_stats?.is_paid_user ? <Tag color="gold">Paid User</Tag> : <Tag>Free User</Tag>}
+                  {selectedUser.payment_stats?.has_payment_intent && <Tag color="orange">Has Intent</Tag>}
+                </Descriptions.Item>
               </Descriptions>
 
               <div style={{ marginTop: 24 }}>
@@ -426,36 +605,53 @@ const App = () => {
                   <List
                     itemLayout="vertical"
                     dataSource={selectedUser.top_workflows}
-                    renderItem={item => (
-                      <List.Item
-                        extra={
-                          item.snapshot_url && (
-                            <img
-                              width={100}
-                              alt="snapshot"
-                              src={item.snapshot_url}
-                              style={{ borderRadius: 8, objectFit: 'cover' }}
-                            />
-                          )
-                        }
-                      >
-                        <List.Item.Meta
-                          avatar={<Badge count={item.rank} color="#722ed1" />}
-                          title={
-                            <Space>
-                              {item.workflow_name || "Unnamed Workflow"}
-                              <Tag color="cyan">Runs: {item.run_count}</Tag>
-                            </Space>
+                    renderItem={item => {
+                      // Logic to fallback for name and node types
+                      const displayName = item.workflow_name || (item.flow_id ? `Workflow (${item.flow_id.slice(-6)})` : `Workflow #${item.rank}`);
+
+                      let displayNodeTypes = item.node_types || [];
+                      if (displayNodeTypes.length === 0 && item.topology?.nodes) {
+                        // Extract unique types from topology
+                        displayNodeTypes = Array.from(new Set(item.topology.nodes.map(n => n.type)));
+                      }
+
+                      return (
+                        <List.Item
+                          extra={
+                            item.snapshot_url && (
+                              <img
+                                width={100}
+                                alt="snapshot"
+                                src={item.snapshot_url}
+                                style={{ borderRadius: 8, objectFit: 'cover' }}
+                              />
+                            )
                           }
-                          description={
-                            <Space direction="vertical" size={2}>
-                              <Text type="secondary" style={{ fontSize: 12 }}>Node Types: {item.node_types?.join(', ')}</Text>
-                              <Text code style={{ fontSize: 10 }}>{item.signature}</Text>
-                            </Space>
-                          }
-                        />
-                      </List.Item>
-                    )}
+                        >
+                          <List.Item.Meta
+                            avatar={<Badge count={item.rank} color="#722ed1" />}
+                            title={
+                              <Space>
+                                {displayName}
+                                <Tag color="cyan">Runs: {item.run_count}</Tag>
+                              </Space>
+                            }
+                            description={
+                              <Space direction="vertical" size={2}>
+                                {displayNodeTypes.length > 0 ? (
+                                  <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Nodes: {displayNodeTypes.slice(0, 5).join(', ')}
+                                    {displayNodeTypes.length > 5 && '...'}
+                                  </Text>
+                                ) : <Text type="secondary" style={{ fontSize: 12 }}>Nodes: N/A</Text>}
+
+                                {item.flow_id && <Text copyable={{ text: item.flow_id }} style={{ fontSize: 10, color: '#bfbfbf' }}>ID: {item.flow_id}</Text>}
+                              </Space>
+                            }
+                          />
+                        </List.Item>
+                      );
+                    }}
                   />
                 </div>
               )}
