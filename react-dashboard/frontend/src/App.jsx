@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import {
   Layout, Table, Tag, Space, Card, Statistic, Row, Col,
   Form, Select, Slider, Button, Drawer, Typography, Descriptions,
-  List, Badge, ConfigProvider, theme, DatePicker, Spin, Tooltip as AntTooltip
+  List, Badge, ConfigProvider, theme, DatePicker, Spin, Tooltip as AntTooltip,
+  Modal, Input, Checkbox, Tabs, Popconfirm, message
 } from 'antd';
 import dayjs from 'dayjs';
 import {
   UserOutlined, DashboardOutlined, FilterOutlined,
   ReloadOutlined, RiseOutlined, RocketTwoTone, ArrowLeftOutlined,
   PlayCircleTwoTone, CheckCircleTwoTone, MenuFoldOutlined, MenuUnfoldOutlined,
-  QuestionCircleOutlined
+  QuestionCircleOutlined, RadarChartOutlined, ControlOutlined, SettingOutlined, DeleteOutlined
 } from '@ant-design/icons';
-import { getUsers, getStats, getFilters, getUser } from './services/api';
+import { getUsers, getStats, getFilters, getUser, getExclusions, addExclusion, removeExclusion } from './services/api';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const { RangePicker } = DatePicker;
@@ -43,6 +44,13 @@ const App = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [showCharts, setShowCharts] = useState(true);
+
+  // Exclusion State
+  const [exclusionVisible, setExclusionVisible] = useState(false);
+  const [exclusions, setExclusions] = useState({ charts: [], list: [] });
+  const [newExclusionEmail, setNewExclusionEmail] = useState("");
+  const [newExclusionOptions, setNewExclusionOptions] = useState({ charts: true, list: true });
 
   const [collapsed, setCollapsed] = useState(false);
 
@@ -102,19 +110,13 @@ const App = () => {
       setGlobalCategory(null);
       // Reset stats to show all (respecting time)
       fetchStats(dateRange, null);
-      // Reset table filter
-      setFilters(prev => {
-        const next = { ...prev, page: 1 };
-        delete next.category;
-        return next;
-      });
+      // DO NOT reset table filter (Decoupled)
     } else {
       // Select
       setGlobalCategory(category);
       // Filter stats (industries, counts) by this category
       fetchStats(dateRange, category);
-      // Filter table
-      setFilters(prev => ({ ...prev, category, page: 1 }));
+      // DO NOT Filter table (Decoupled)
     }
     // Reset subcategory view in Pie (optional, user might want to stay drilled down?)
     // For now, let's reset subcategory view if switching major category
@@ -130,10 +132,12 @@ const App = () => {
         params.start_date = dateRange[0].toISOString();
         params.end_date = dateRange[1].toISOString();
       }
-      // Global category overrides form category if present (or syncs with it)
-      // Also include globalSubcategory
-      if (globalCategory) params.category = globalCategory;
-      if (globalSubcategory) params.subcategory = globalSubcategory;
+      if (dateRange) {
+        params.start_date = dateRange[0].toISOString();
+        params.end_date = dateRange[1].toISOString();
+      }
+      // DECOUPLED: Global category (Charts) does NOT affect User List anymore
+      // We only use the filters set by the Sidebar Form (which are already in `filters`)
 
       const data = await getUsers(params);
       setUsers(data.items);
@@ -326,10 +330,21 @@ const App = () => {
           zIndex: 10,
           borderBottom: '1px solid #f0f0f0'
         }}>
-          <RocketTwoTone twoToneColor="#722ed1" style={{ fontSize: '28px', marginRight: '12px' }} />
+          <RadarChartOutlined style={{ fontSize: '28px', color: '#722ed1', marginRight: '12px' }} />
           <Title level={3} style={{ margin: 0, background: 'linear-gradient(45deg, #722ed1, #1890ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             User Insights
           </Title>
+          <div style={{ marginLeft: 'auto' }}>
+            <Space>
+               <AntTooltip title="可以持久化永久的移除指定用户，防止极端数据干扰看板">
+                  <QuestionCircleOutlined style={{ color: '#999', cursor: 'help', fontSize: '18px' }} />
+               </AntTooltip>
+               <Button icon={<SettingOutlined />} onClick={() => {
+                  getExclusions().then(setExclusions);
+                  setExclusionVisible(true);
+               }}>过滤指定用户</Button>
+            </Space>
+          </div>
         </Header>
 
         <Layout>
@@ -350,7 +365,14 @@ const App = () => {
             }}
           >
             <div style={{ display: 'flex', justifyContent: collapsed ? 'center' : 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              {!collapsed && <Title level={4} style={{ margin: 0, fontWeight: 300 }}><FilterOutlined /> Filters</Title>}
+              {!collapsed && (
+                <Title level={4} style={{ margin: 0, fontWeight: 300 }}>
+                  <ControlOutlined style={{ marginRight: 8 }} /> User List Filter
+                  <AntTooltip title="这里只过滤下方的 User List，不会影响上方的图表统计">
+                    <QuestionCircleOutlined style={{ marginLeft: 8, fontSize: 14, color: '#999', cursor: 'help' }} />
+                  </AntTooltip>
+                </Title>
+              )}
               <Button
                 type="text"
                 icon={collapsed ? <FilterOutlined style={{ fontSize: 18 }} /> : <MenuFoldOutlined />}
@@ -380,6 +402,10 @@ const App = () => {
               }}>
                 <Form.Item label="Date Range" name="dateRange">
                   <RangePicker style={{ width: '100%' }} />
+                </Form.Item>
+
+                <Form.Item label="Email Filter" name="email">
+                  <Input placeholder="Search by email" prefix={<UserOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} />
                 </Form.Item>
 
                 <Form.Item label="Min Potential Score" name="min_score" initialValue={1}>
@@ -415,10 +441,15 @@ const App = () => {
                 </Form.Item>
               </Form>
               <Button type="primary" block icon={<FilterOutlined />} onClick={() => {
-                // Apply Date Range
-                setDateRange(pendingDateRange);
-                fetchStats(pendingDateRange, globalCategory);
-                // Apply Filters
+                // Apply Date Range (Only for User List parameters if we wanted, but logic currently shares dateRange state)
+                // Actually dateRange state is used for stats too.
+                // Re-fetch stats ONLY if date range actually changed?
+                // User requirement: "Filter only changes User List"
+                // But date range usually applies to everything.
+                // However, user said "Charts separately are charts".
+                // Let's NOT call fetchStats here.
+
+                // Apply Filters to User List
                 setFilters(prev => ({ ...prev, ...pendingFilters, page: 1 }));
               }} style={{ marginTop: 16 }}>
                 Apply Filters
@@ -434,8 +465,14 @@ const App = () => {
           </Sider>
 
           <Content style={{ padding: '24px', overflowY: 'auto', background: '#f5f7fa' }}>
+            <div style={{ marginBottom: 16, textAlign: 'right' }}>
+              <Button type={showCharts ? "default" : "primary"} onClick={() => setShowCharts(!showCharts)}>
+                {showCharts ? "Collapse Charts" : "Show Charts"}
+              </Button>
+            </div>
+
             {/* Dashboard Stats */}
-            {stats && (
+            {stats && showCharts && (
               <Spin spinning={chartsLoading}>
                 <Row gutter={16} style={{ marginBottom: '24px' }}>
                   <Col span={6}>
@@ -837,6 +874,112 @@ const App = () => {
           )}
         </Drawer>
       </Layout>
+
+      {/* Exclusion Modal */}
+      <Modal
+        title="Exclude Users (Persistent)"
+        visible={exclusionVisible}
+        onCancel={() => setExclusionVisible(false)}
+        footer={null}
+        width={600}
+      >
+        <div style={{ marginBottom: 24, padding: 16, background: '#f9f9f9', borderRadius: 8 }}>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Text strong>Add New Exclusion</Text>
+            <Input
+              placeholder="Enter email to exclude"
+              value={newExclusionEmail}
+              onChange={e => setNewExclusionEmail(e.target.value)}
+            />
+            <Space>
+              <Checkbox
+                checked={newExclusionOptions.charts}
+                onChange={e => setNewExclusionOptions(p => ({ ...p, charts: e.target.checked }))}
+              >
+                Exclude from Charts
+              </Checkbox>
+              <Checkbox
+                checked={newExclusionOptions.list}
+                onChange={e => setNewExclusionOptions(p => ({ ...p, list: e.target.checked }))}
+              >
+                Exclude from User List
+              </Checkbox>
+            </Space>
+            <Button type="primary" onClick={async () => {
+              if (!newExclusionEmail) return;
+              try {
+                const res = await addExclusion(newExclusionEmail, newExclusionOptions.charts, newExclusionOptions.list);
+                setExclusions(res.config);
+                setNewExclusionEmail("");
+                message.success("User excluded successfully");
+
+                // Refresh Data
+                if (newExclusionOptions.charts) {
+                  fetchStats(dateRange, globalCategory);
+                }
+                if (newExclusionOptions.list) {
+                  fetchUserData();
+                }
+              } catch (e) { message.error("Failed to add exclusion"); }
+            }}>
+              Add to Exclusion List
+            </Button>
+          </Space>
+        </div>
+
+        <Tabs defaultActiveKey="charts" items={[
+          {
+            key: 'charts',
+            label: `Charts Blacklist (${exclusions.charts.length})`,
+            children: (
+              <List
+                size="small"
+                dataSource={exclusions.charts}
+                renderItem={email => (
+                  <List.Item actions={[
+                    <Popconfirm title="Remove?" onConfirm={async () => {
+                      const res = await removeExclusion(email);
+                      setExclusions(res.config);
+                      fetchStats(dateRange, globalCategory);
+                      fetchUserData();
+                    }}>
+                      <Button type="text" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  ]}>
+                    {email}
+                  </List.Item>
+                )}
+              />
+            )
+          },
+          {
+            key: 'list',
+            label: `User List Blacklist (${exclusions.list.length})`,
+            children: (
+              <List
+                size="small"
+                dataSource={exclusions.list}
+                renderItem={email => (
+                  <List.Item actions={[
+                    <Popconfirm title="Remove?" onConfirm={async () => {
+                      const res = await removeExclusion(email);
+                      setExclusions(res.config);
+                      // Refresh both
+                      fetchStats(dateRange, globalCategory);
+                      fetchUserData();
+                    }}>
+                      <Button type="text" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  ]}>
+                    {email}
+                  </List.Item>
+                )}
+              />
+            )
+          }
+        ]} />
+      </Modal>
+
     </ConfigProvider>
   );
 };

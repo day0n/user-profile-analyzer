@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from exclusion_manager import exclusion_manager
 
 # Load .env.local
 current_dir = Path(__file__).resolve().parent
@@ -156,6 +157,15 @@ class ActiveUsersResponse(BaseModel):
     end_date: str
     user_ids: List[str]
 
+class ExclusionRule(BaseModel):
+    email: str
+    exclude_charts: bool
+    exclude_list: bool
+
+class ExclusionResponse(BaseModel):
+    charts: List[str]
+    list: List[str]
+
 # --- Helper for Time Filtering ---
 async def fetch_active_user_ids(start_date: Optional[str], end_date: Optional[str]) -> List[str]:
     """
@@ -206,27 +216,45 @@ async def fetch_active_user_ids(start_date: Optional[str], end_date: Optional[st
 
 @app.get("/api/users", response_model=PaginatedResponse)
 async def list_users(
-    page: int = 1,
-    limit: int = 50,
-    industry: Optional[str] = None,
+    page: int = 1, 
+    limit: int = 10, 
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     platform: Optional[str] = None,
+    industry: Optional[str] = None,
     stage: Optional[str] = None,
     category: Optional[str] = None,
     subcategory: Optional[str] = None,
-    min_score: Optional[int] = Query(None),
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    sort_by: str = "business_potential.score",
-    sort_order: str = "desc"
-):
-    print(f"DEBUG: list_users called with sort_by={sort_by}, sort_order={sort_order}")
+    min_score: Optional[int] = None,
+    email: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc"
+):  
+    print(f"DEBUG: list_users called with params: {locals()}")
+    skip = (page - 1) * limit
+    
     query = {}
-    if industry: query["ai_profile.positioning.industry"] = industry
-    if platform: query["ai_profile.positioning.platform"] = platform
-    if stage: query["ai_profile.business_potential.stage"] = stage
-    if category: query["ai_profile.user_category"] = category
-    if subcategory: query["ai_profile.user_subcategory"] = subcategory
-    if min_score is not None: query["ai_profile.business_potential.score"] = {"$gte": min_score}
+    
+    # Existing Filters
+    # Existing Filters
+    # Removed incorrect created_at query here. Date filtering is handled by fetch_active_user_ids below.
+        
+    if platform:
+        query["ai_profile.positioning.platform"] = platform
+    if industry:
+        query["ai_profile.positioning.industry"] = industry
+    if stage:
+        query["ai_profile.business_potential.stage"] = stage
+    if category:
+        query["ai_profile.user_category"] = category
+    if subcategory:
+        query["ai_profile.user_subcategory"] = subcategory
+    if min_score:
+        query["ai_profile.business_potential.score"] = {"$gte": min_score}
+    
+    # EMAIL Filter (Partial Match)
+    if email:
+        query["user_email"] = {"$regex": email, "$options": "i"}
 
     # Time Filter via flow_task (Business Time)
     if start_date or end_date:
@@ -242,21 +270,35 @@ async def list_users(
     skip = (page - 1) * limit
     
     sort_field = "ai_profile.business_potential.score"
-    if sort_by == "stats.active_days":
-        sort_field = "stats.active_days"
-    elif sort_by == "stats.total_runs":
-        sort_field = "stats.total_runs"
-    elif sort_by.startswith("payment_stats."):
-        sort_field = sort_by
+    if sort_by:
+        if sort_by == "stats.active_days":
+            sort_field = "stats.active_days"
+        elif sort_by == "stats.total_runs":
+            sort_field = "stats.total_runs"
+        elif sort_by.startswith("payment_stats."):
+            sort_field = sort_by
     
     sort_dir = -1 if sort_order == "desc" else 1
 
-    total = await collection.count_documents(query)
+    
+    # --- Exclusion Logic (List) ---
+    exclusions = exclusion_manager.get_exclusions()
+    if exclusions["list"]:
+        # Exclude users whose email is in the 'list' blacklist
+        # Merge with existing user_email query (from search) if exists
+        current_email_query = query.get("user_email", {})
+        if isinstance(current_email_query, str): # Should not happen based on current logic but good safety
+             current_email_query = {"$eq": current_email_query}
+        
+        current_email_query["$nin"] = exclusions["list"]
+        query["user_email"] = current_email_query
+    
+    total_count = await collection.count_documents(query)
     cursor = collection.find(query).sort(sort_field, sort_dir).skip(skip).limit(limit)
     users = await cursor.to_list(length=limit)
     
     for u in users: u["_id"] = str(u["_id"])
-    return {"total": total, "page": page, "limit": limit, "items": users}
+    return {"total": total_count, "page": page, "limit": limit, "items": users}
 
 @app.get("/api/users/{user_id}", response_model=UserProfile)
 async def get_user(user_id: str):
@@ -285,6 +327,11 @@ async def get_stats(
     # Apply global category filter to existing match
     if category:
         params_match["ai_profile.user_category"] = category
+
+    # --- Exclusion Logic (Charts) ---
+    exclusions = exclusion_manager.get_exclusions()
+    if exclusions["charts"]:
+         params_match["user_email"] = {"$nin": exclusions["charts"]}
 
     pipeline_industry = [
         {"$match": {**params_match, "ai_profile.positioning.industry": {"$ne": "无法判断"}}},
@@ -453,6 +500,22 @@ async def get_active_users(
         "end_date": end_date,
         "user_ids": user_ids
     }
+
+# --- Exclusion Config API ---
+
+@app.get("/api/config/exclusion", response_model=ExclusionResponse)
+async def get_exclusion_config():
+    return exclusion_manager.get_exclusions()
+
+@app.post("/api/config/exclusion")
+async def add_exclusion(rule: ExclusionRule):
+    exclusion_manager.add(rule.email, rule.exclude_charts, rule.exclude_list)
+    return {"status": "ok", "config": exclusion_manager.get_exclusions()}
+
+@app.delete("/api/config/exclusion")
+async def remove_exclusion(email: str = Query(...)):
+    exclusion_manager.remove(email)
+    return {"status": "ok", "config": exclusion_manager.get_exclusions()}
 
 if __name__ == "__main__":
     import uvicorn
