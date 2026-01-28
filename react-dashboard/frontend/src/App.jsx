@@ -26,7 +26,10 @@ const App = () => {
   // Global State (driven by Pie Chart)
   const [globalCategory, setGlobalCategory] = useState(null);
   const [globalSubcategory, setGlobalSubcategory] = useState(null);
-  const [dateRange, setDateRange] = useState(null);
+
+  // Date Ranges
+  const [chartDateRange, setChartDateRange] = useState(null); // Dedicated for Charts
+  const [listDateRange, setListDateRange] = useState(null);   // Dedicated for User List
 
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -68,10 +71,10 @@ const App = () => {
   // (This is just context, I will scroll down to render to replace Sider)
 
 
-  // Reload users when filters change
+  // Reload users when filters or listDateRange change
   useEffect(() => {
     fetchUserData();
-  }, [filters]);
+  }, [filters, listDateRange]);
 
   const loadInitData = async () => {
     setChartsLoading(true);
@@ -83,7 +86,7 @@ const App = () => {
     } catch (e) {
       console.error(e);
     } finally {
-        setChartsLoading(false);
+      setChartsLoading(false);
     }
   };
 
@@ -112,13 +115,13 @@ const App = () => {
       // Deselect
       setGlobalCategory(null);
       // Reset stats to show all (respecting time)
-      fetchStats(dateRange, null);
+      fetchStats(chartDateRange, null);
       // DO NOT reset table filter (Decoupled)
     } else {
       // Select
       setGlobalCategory(category);
       // Filter stats (industries, counts) by this category
-      fetchStats(dateRange, category);
+      fetchStats(chartDateRange, category);
       // DO NOT Filter table (Decoupled)
     }
     // Reset subcategory view in Pie (optional, user might want to stay drilled down?)
@@ -131,13 +134,9 @@ const App = () => {
     try {
       // Pass filters including date range and global category
       const params = { ...filters };
-      if (dateRange) {
-        params.start_date = dateRange[0].toISOString();
-        params.end_date = dateRange[1].toISOString();
-      }
-      if (dateRange) {
-        params.start_date = dateRange[0].toISOString();
-        params.end_date = dateRange[1].toISOString();
+      if (listDateRange) {
+        params.start_date = listDateRange[0].toISOString();
+        params.end_date = listDateRange[1].toISOString();
       }
       // DECOUPLED: Global category (Charts) does NOT affect User List anymore
       // We only use the filters set by the Sidebar Form (which are already in `filters`)
@@ -337,15 +336,16 @@ const App = () => {
           <Title level={3} style={{ margin: 0, background: 'linear-gradient(45deg, #722ed1, #1890ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             User Insights
           </Title>
-          <div style={{ marginLeft: 'auto' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Chart Date moved to Chart Card as requested */}
             <Space>
-               <AntTooltip title="可以持久化永久的移除指定用户，防止极端数据干扰看板">
-                  <QuestionCircleOutlined style={{ color: '#999', cursor: 'help', fontSize: '18px' }} />
-               </AntTooltip>
-               <Button icon={<SettingOutlined />} onClick={() => {
-                  getExclusions().then(setExclusions);
-                  setExclusionVisible(true);
-               }}>过滤指定用户</Button>
+              <AntTooltip title="可以持久化永久的移除指定用户，防止极端数据干扰看板">
+                <QuestionCircleOutlined style={{ color: '#999', cursor: 'help', fontSize: '18px' }} />
+              </AntTooltip>
+              <Button icon={<SettingOutlined />} onClick={() => {
+                getExclusions().then(setExclusions);
+                setExclusionVisible(true);
+              }}>过滤指定用户</Button>
             </Space>
           </div>
         </Header>
@@ -444,15 +444,8 @@ const App = () => {
                 </Form.Item>
               </Form>
               <Button type="primary" block icon={<FilterOutlined />} onClick={() => {
-                // Apply Date Range (Only for User List parameters if we wanted, but logic currently shares dateRange state)
-                // Actually dateRange state is used for stats too.
-                // Re-fetch stats ONLY if date range actually changed?
-                // User requirement: "Filter only changes User List"
-                // But date range usually applies to everything.
-                // However, user said "Charts separately are charts".
-                // Let's NOT call fetchStats here.
-
                 // Apply Filters to User List
+                setListDateRange(pendingDateRange);
                 setFilters(prev => ({ ...prev, ...pendingFilters, page: 1 }));
               }} style={{ marginTop: 16 }}>
                 Apply Filters
@@ -475,257 +468,278 @@ const App = () => {
             </div>
 
             {/* Dashboard Stats */}
-            {stats && showCharts && (
-              <Spin spinning={chartsLoading}>
-                <Row gutter={16} style={{ marginBottom: '24px' }}>
-                  <Col span={6}>
-                    <Card hoverable>
-                      <Statistic
-                        title={globalCategory ? `Total Users (${globalCategory})` : "Total Users"}
-                        value={stats.total_users}
-                        prefix={<UserOutlined style={{ color: '#1890ff' }} />}
-                      />
-                    </Card>
-                  </Col>
-                  <Col span={6}>
-                    <Card hoverable>
-                      <Statistic
-                        title="High Potential (>7)"
-                        value={stats.high_potential_count}
-                        valueStyle={{ color: '#3f8600' }}
-                        prefix={<RiseOutlined />}
-                      />
-                    </Card>
-                  </Col>
+            {/* Show if stats loaded OR if loading (to show spinner) */}
+            {/* Show if stats loaded OR if loading (to show spinner) */}
+            {(stats || chartsLoading) && showCharts && (
+              <Spin spinning={chartsLoading} style={{ minHeight: 200, display: 'block' }}>
+                {stats && (
+                  <>
+                    <Row gutter={16} style={{ marginBottom: '24px' }}>
+                      <Col span={6}>
+                        <Card hoverable>
+                          <Statistic
+                            title={globalCategory ? `Total Users (${globalCategory})` : "Total Users"}
+                            value={stats.total_users}
+                            prefix={<UserOutlined style={{ color: '#1890ff' }} />}
+                          />
 
-                </Row>
+                        </Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card hoverable>
+                          <Statistic
+                            title="High Potential (>7)"
+                            value={stats.high_potential_count}
+                            valueStyle={{ color: '#3f8600' }}
+                            prefix={<RiseOutlined />}
+                          />
+                        </Card>
+                      </Col>
 
-                {/* Analytical Charts */}
-                {/* Analytical Charts */}
-                {/* Row 1: Category Pie Chart (Full Width) */}
-                <Row gutter={16} style={{ marginBottom: '24px' }}>
-                  <Col span={24}>
-                    <Card
-                      title={
-                        selectedCategory ? (
+                    </Row>
+
+                    {/* Analytical Charts */}
+                    {/* Analytical Charts */}
+                    {/* Row 1: Category Pie Chart (Full Width) */}
+                    <Row gutter={16} style={{ marginBottom: '24px' }}>
+                      <Col span={24}>
+                        <Card
+                          title={
+                            selectedCategory ? (
+                              <Space>
+                                <Button type="text" icon={<ArrowLeftOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedCategory(null); }} />
+                                {selectedCategory}
+                              </Space>
+                            ) : "User Category Distribution"
+                          }
+                          extra={
+                            <Space>
+                              <span style={{ color: '#666', fontSize: 12 }}>Chart Date:</span>
+                              <RangePicker
+                                size="small"
+                                style={{ width: 220 }}
+                                onChange={(dates) => {
+                                  setChartDateRange(dates);
+                                  fetchStats(dates, globalCategory);
+                                }}
+                                allowClear
+                              />
+                              <div style={{ width: 1, height: 16, background: '#eee', margin: '0 4px' }} />
+                              {!selectedCategory && <Text type="secondary" style={{ fontSize: 12 }}>Click Slice to Filter</Text>}
+                            </Space>
+                          }
+                          style={{ height: 500, border: globalCategory ? '2px solid #722ed1' : undefined }}
+                        >
+                          {stats.categories ? (
+                            <ResponsiveContainer width="100%" height={430}>
+                              <PieChart>
+                                <Pie
+                                  data={
+                                    (selectedCategory && stats.categories[selectedCategory]
+                                      ? Object.entries(stats.categories[selectedCategory].subcategories).map(([name, value]) => ({ name, value }))
+                                      : Object.entries(stats.categories).map(([name, data]) => ({ name, value: data.count }))
+                                    ).filter(item => item.name !== '教育/培训' && item.value > 0)
+                                  }
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={80}
+                                  outerRadius={110}
+                                  fill="#1890ff"
+                                  paddingAngle={5}
+                                  dataKey="value"
+                                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                  onClick={(data) => {
+                                    // Disable subcategory clicking as requested
+                                    if (selectedCategory) return;
+                                    onGlobalCategorySelect(data.name);
+                                    setSelectedCategory(data.name);
+                                  }}
+                                  style={{ cursor: selectedCategory ? 'default' : 'pointer' }}
+                                >
+                                  {/* Custom Cells */}
+                                  {(selectedCategory && stats.categories[selectedCategory]
+                                    ? Object.entries(stats.categories[selectedCategory].subcategories).map(([n, _]) => n)
+                                    : Object.entries(stats.categories).map(([n, _]) => n)
+                                  ).map((name, index) => (
+                                    <Cell
+                                      key={`cell-${index}`}
+                                      fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#EFDB50', '#ff85c0'][index % 7]}
+                                      stroke={globalCategory === name ? '#722ed1' : '#fff'}
+                                      strokeWidth={globalCategory === name ? 3 : 2}
+                                    />
+                                  ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '10px' }} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          ) : <Text type="secondary">No category data yet.</Text>}
+                        </Card>
+                      </Col>
+                    </Row>
+
+                    {/* Row 2: 3 Charts (Conversion, Intent, Average Amount) */}
+                    <Row gutter={16} style={{ marginBottom: '24px' }}>
+
+                      {/* 2. Payment Rate Chart (Line) */}
+                      <Col span={8}>
+                        <Card title={
                           <Space>
-                            <Button type="text" icon={<ArrowLeftOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedCategory(null); }} />
-                            {selectedCategory}
+                            Payment Conversion Rate
+                            <AntTooltip title={
+                              <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
+                                <div><b>公式：</b>paid_count &gt; 0 的用户占比。</div>
+                                <div style={{ marginTop: '4px' }}><b>含义：</b>只要有成功支付过（哪怕只有1次），就算作转化成功。</div>
+                              </div>
+                            }>
+                              <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
+                            </AntTooltip>
                           </Space>
-                        ) : "User Category Distribution"
-                      }
-                      extra={!selectedCategory && <Text type="secondary" style={{ fontSize: 12 }}>Click Slice to Filter</Text>}
-                      style={{ height: 500, border: globalCategory ? '2px solid #722ed1' : undefined }}
-                    >
-                      {stats.categories ? (
-                        <ResponsiveContainer width="100%" height={430}>
-                          <PieChart>
-                            <Pie
-                              data={
-                                (selectedCategory && stats.categories[selectedCategory]
-                                  ? Object.entries(stats.categories[selectedCategory].subcategories).map(([name, value]) => ({ name, value }))
-                                  : Object.entries(stats.categories).map(([name, data]) => ({ name, value: data.count }))
-                                ).filter(item => item.name !== '教育/培训' && item.value > 0)
-                              }
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={80}
-                              outerRadius={110}
-                              fill="#1890ff"
-                              paddingAngle={5}
-                              dataKey="value"
-                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                              onClick={(data) => {
-                                // Disable subcategory clicking as requested
-                                if (selectedCategory) return;
-                                onGlobalCategorySelect(data.name);
-                                setSelectedCategory(data.name);
-                              }}
-                              style={{ cursor: selectedCategory ? 'default' : 'pointer' }}
-                            >
-                              {/* Custom Cells */}
-                              {(selectedCategory && stats.categories[selectedCategory]
-                                ? Object.entries(stats.categories[selectedCategory].subcategories).map(([n, _]) => n)
-                                : Object.entries(stats.categories).map(([n, _]) => n)
-                              ).map((name, index) => (
-                                <Cell
-                                  key={`cell-${index}`}
-                                  fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#EFDB50', '#ff85c0'][index % 7]}
-                                  stroke={globalCategory === name ? '#722ed1' : '#fff'}
-                                  strokeWidth={globalCategory === name ? 3 : 2}
+                        } style={{ height: 500 }}>
+                          {stats.payment_stats && (
+                            <ResponsiveContainer width="100%" height={430}>
+                              <LineChart
+                                data={Object.entries(stats.payment_stats)
+                                  .map(([name, data]) => ({ name, rate: data.rate, paid: data.paid, total: data.total }))
+                                  .filter(item => item.name !== '教育/培训')
+                                  .sort((a, b) => b.rate - a.rate)
+                                }
+                                margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
+                                <YAxis unit="%" />
+                                <Tooltip
+                                  content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                      const data = payload[0].payload;
+                                      return (
+                                        <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
+                                          <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
+                                          <p style={{ color: '#8884d8', marginBottom: 4 }}>Conversion Rate: {data.rate}%</p>
+                                          <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
+                                            Paid Users: {data.paid}<br />
+                                            Total Users: {data.total}
+                                          </p>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  }}
                                 />
-                              ))}
-                            </Pie>
-                            <Tooltip />
-                            <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '10px' }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      ) : <Text type="secondary">No category data yet.</Text>}
-                    </Card>
-                  </Col>
-                </Row>
+                                <Line type="monotone" dataKey="rate" stroke="#8884d8" name="Conversion Rate" strokeWidth={2} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Card>
+                      </Col>
 
-                {/* Row 2: 3 Charts (Conversion, Intent, Average Amount) */}
-                <Row gutter={16} style={{ marginBottom: '24px' }}>
-
-                  {/* 2. Payment Rate Chart (Line) */}
-                  <Col span={8}>
-                    <Card title={
-                      <Space>
-                        Payment Conversion Rate
-                        <AntTooltip title={
-                          <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
-                            <div><b>公式：</b>paid_count &gt; 0 的用户占比。</div>
-                            <div style={{ marginTop: '4px' }}><b>含义：</b>只要有成功支付过（哪怕只有1次），就算作转化成功。</div>
-                          </div>
-                        }>
-                          <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
-                        </AntTooltip>
-                      </Space>
-                    } style={{ height: 500 }}>
-                      {stats.payment_stats && (
-                        <ResponsiveContainer width="100%" height={430}>
-                          <LineChart
-                            data={Object.entries(stats.payment_stats)
-                              .map(([name, data]) => ({ name, rate: data.rate, paid: data.paid, total: data.total }))
-                              .filter(item => item.name !== '教育/培训')
-                              .sort((a, b) => b.rate - a.rate)
-                            }
-                            margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
-                            <YAxis unit="%" />
-                            <Tooltip
-                              content={({ active, payload, label }) => {
-                                if (active && payload && payload.length) {
-                                  const data = payload[0].payload;
-                                  return (
-                                    <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
-                                      <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
-                                      <p style={{ color: '#8884d8', marginBottom: 4 }}>Conversion Rate: {data.rate}%</p>
-                                      <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
-                                        Paid Users: {data.paid}<br />
-                                        Total Users: {data.total}
-                                      </p>
-                                    </div>
-                                  );
+                      {/* 3. Payment Intent Rate Chart (Line) */}
+                      <Col span={8}>
+                        <Card title={
+                          <Space>
+                            Payment Intent Rate
+                            <AntTooltip title={
+                              <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
+                                <div><b>公式：</b>paid_count == 0 且 unpaid_count &gt; 0 的用户占比。</div>
+                                <div style={{ marginTop: '4px' }}><b>含义：</b>仅包含那些“尝试过但从未成功支付”的用户。</div>
+                              </div>
+                            }>
+                              <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
+                            </AntTooltip>
+                          </Space>
+                        } style={{ height: 500 }}>
+                          {stats.payment_stats && (
+                            <ResponsiveContainer width="100%" height={430}>
+                              <LineChart
+                                data={Object.entries(stats.payment_stats)
+                                  .map(([name, data]) => ({ name, rate: data.intent_rate, intent: data.intent, total: data.total }))
+                                  .filter(item => item.name !== '教育/培训')
+                                  .sort((a, b) => b.rate - a.rate)
                                 }
-                                return null;
-                              }}
-                            />
-                            <Line type="monotone" dataKey="rate" stroke="#8884d8" name="Conversion Rate" strokeWidth={2} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      )}
-                    </Card>
-                  </Col>
+                                margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
+                                <YAxis unit="%" />
+                                <Tooltip
+                                  content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                      const data = payload[0].payload;
+                                      return (
+                                        <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
+                                          <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
+                                          <p style={{ color: '#82ca9d', marginBottom: 4 }}>Intent Rate: {data.rate}%</p>
+                                          <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
+                                            Intent Users: {data.intent}<br />
+                                            Total Users: {data.total}
+                                          </p>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                />
+                                <Line type="monotone" dataKey="rate" stroke="#82ca9d" name="Intent Rate" strokeWidth={2} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Card>
+                      </Col>
 
-                  {/* 3. Payment Intent Rate Chart (Line) */}
-                  <Col span={8}>
-                    <Card title={
-                      <Space>
-                        Payment Intent Rate
-                        <AntTooltip title={
-                          <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
-                            <div><b>公式：</b>paid_count == 0 且 unpaid_count &gt; 0 的用户占比。</div>
-                            <div style={{ marginTop: '4px' }}><b>含义：</b>仅包含那些“尝试过但从未成功支付”的用户。</div>
-                          </div>
-                        }>
-                          <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
-                        </AntTooltip>
-                      </Space>
-                    } style={{ height: 500 }}>
-                      {stats.payment_stats && (
-                        <ResponsiveContainer width="100%" height={430}>
-                          <LineChart
-                            data={Object.entries(stats.payment_stats)
-                              .map(([name, data]) => ({ name, rate: data.intent_rate, intent: data.intent, total: data.total }))
-                              .filter(item => item.name !== '教育/培训')
-                              .sort((a, b) => b.rate - a.rate)
-                            }
-                            margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
-                            <YAxis unit="%" />
-                            <Tooltip
-                              content={({ active, payload, label }) => {
-                                if (active && payload && payload.length) {
-                                  const data = payload[0].payload;
-                                  return (
-                                    <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
-                                      <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
-                                      <p style={{ color: '#82ca9d', marginBottom: 4 }}>Intent Rate: {data.rate}%</p>
-                                      <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
-                                        Intent Users: {data.intent}<br />
-                                        Total Users: {data.total}
-                                      </p>
-                                    </div>
-                                  );
+                      {/* Average Payment Amount */}
+                      <Col span={8}>
+                        <Card title={
+                          <Space>
+                            Average Payment Amount
+                            <AntTooltip title={
+                              <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
+                                <div><b>公式：</b>sum(paid_amount) / total_users</div>
+                                <div style={{ marginTop: '4px' }}><b>含义：</b>该品类下所有用户的平均支付金额（包含未支付用户，计算整体价值）。</div>
+                              </div>
+                            }>
+                              <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
+                            </AntTooltip>
+                          </Space>
+                        } style={{ height: 500 }}>
+                          {stats.payment_stats && (
+                            <ResponsiveContainer width="100%" height={430}>
+                              <BarChart
+                                data={Object.entries(stats.payment_stats)
+                                  .map(([name, data]) => ({ name, amount: data.avg_amount }))
+                                  .filter(item => item.name !== '教育/培训')
+                                  .sort((a, b) => b.amount - a.amount)
                                 }
-                                return null;
-                              }}
-                            />
-                            <Line type="monotone" dataKey="rate" stroke="#82ca9d" name="Intent Rate" strokeWidth={2} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      )}
-                    </Card>
-                  </Col>
-
-                  {/* Average Payment Amount */}
-                  <Col span={8}>
-                    <Card title={
-                      <Space>
-                        Average Payment Amount
-                        <AntTooltip title={
-                          <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
-                            <div><b>公式：</b>sum(paid_amount) / total_users</div>
-                            <div style={{ marginTop: '4px' }}><b>含义：</b>该品类下所有用户的平均支付金额（包含未支付用户，计算整体价值）。</div>
-                          </div>
-                        }>
-                          <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
-                        </AntTooltip>
-                      </Space>
-                    } style={{ height: 500 }}>
-                      {stats.payment_stats && (
-                        <ResponsiveContainer width="100%" height={430}>
-                          <BarChart
-                            data={Object.entries(stats.payment_stats)
-                              .map(([name, data]) => ({ name, amount: data.avg_amount }))
-                              .filter(item => item.name !== '教育/培训')
-                              .sort((a, b) => b.amount - a.amount)
-                            }
-                            margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
-                            <YAxis unit="$" />
-                            <Tooltip
-                              cursor={{ fill: 'transparent' }}
-                              content={({ active, payload, label }) => {
-                                if (active && payload && payload.length) {
-                                  const data = payload[0].payload;
-                                  return (
-                                    <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
-                                      <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
-                                      <p style={{ color: '#ffc658', marginBottom: 4 }}>Avg Amount: ${data.amount}</p>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              }}
-                            />
-                            <Bar dataKey="amount" fill="#ffc658" name="Avg Amount" barSize={30} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      )}
-                    </Card>
-                  </Col>
-                </Row>
-
-
+                                margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
+                                <YAxis unit="$" />
+                                <Tooltip
+                                  cursor={{ fill: 'transparent' }}
+                                  content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                      const data = payload[0].payload;
+                                      return (
+                                        <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
+                                          <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
+                                          <p style={{ color: '#ffc658', marginBottom: 4 }}>Avg Amount: ${data.amount}</p>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                />
+                                <Bar dataKey="amount" fill="#ffc658" name="Avg Amount" barSize={30} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Card>
+                      </Col>
+                    </Row>
+                  </>
+                )}
+                {!stats && chartsLoading && <div style={{ height: 400 }} />}
               </Spin>
             )}
 
@@ -881,7 +895,7 @@ const App = () => {
       {/* Exclusion Modal */}
       <Modal
         title="Exclude Users (Persistent)"
-        visible={exclusionVisible}
+        open={exclusionVisible}
         onCancel={() => setExclusionVisible(false)}
         footer={null}
         width={600}
@@ -918,7 +932,7 @@ const App = () => {
 
                 // Refresh Data
                 if (newExclusionOptions.charts) {
-                  fetchStats(dateRange, globalCategory);
+                  fetchStats(chartDateRange, globalCategory);
                 }
                 if (newExclusionOptions.list) {
                   fetchUserData();
@@ -943,7 +957,7 @@ const App = () => {
                     <Popconfirm title="Remove?" onConfirm={async () => {
                       const res = await removeExclusion(email);
                       setExclusions(res.config);
-                      fetchStats(dateRange, globalCategory);
+                      fetchStats(chartDateRange, globalCategory);
                       fetchUserData();
                     }}>
                       <Button type="text" danger icon={<DeleteOutlined />} />
@@ -968,7 +982,7 @@ const App = () => {
                       const res = await removeExclusion(email);
                       setExclusions(res.config);
                       // Refresh both
-                      fetchStats(dateRange, globalCategory);
+                      fetchStats(chartDateRange, globalCategory);
                       fetchUserData();
                     }}>
                       <Button type="text" danger icon={<DeleteOutlined />} />

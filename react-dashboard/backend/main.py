@@ -22,13 +22,14 @@ MONGO_DB_NAME = os.getenv("MONGO_DB", "opencreator")
 
 if not MONGO_URI:
     # Fallback/Error handling
-    print("WARNING: MONGO_ATLAS_URI not set.")
+    print("CRITICAL ERROR: MONGO_ATLAS_URI not set. Application cannot start.")
+    sys.exit(1)
 
 app = FastAPI(title="User Profile Analyzer API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], # Specific origins for credentials
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
