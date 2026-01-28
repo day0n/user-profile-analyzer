@@ -111,6 +111,8 @@ class UserStats(BaseModel):
 class PaymentStats(BaseModel):
     paid_count: int = 0
     unpaid_count: int = 0
+    paid_amount: float = 0.0
+    unpaid_amount: float = 0.0
     is_paid_user: bool = False
     has_payment_intent: bool = False
     updated_at: Optional[datetime] = None
@@ -210,17 +212,20 @@ async def list_users(
     platform: Optional[str] = None,
     stage: Optional[str] = None,
     category: Optional[str] = None,
+    subcategory: Optional[str] = None,
     min_score: Optional[int] = Query(None),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     sort_by: str = "business_potential.score",
     sort_order: str = "desc"
 ):
+    print(f"DEBUG: list_users called with sort_by={sort_by}, sort_order={sort_order}")
     query = {}
     if industry: query["ai_profile.positioning.industry"] = industry
     if platform: query["ai_profile.positioning.platform"] = platform
     if stage: query["ai_profile.business_potential.stage"] = stage
     if category: query["ai_profile.user_category"] = category
+    if subcategory: query["ai_profile.user_subcategory"] = subcategory
     if min_score is not None: query["ai_profile.business_potential.score"] = {"$gte": min_score}
 
     # Time Filter via flow_task (Business Time)
@@ -239,6 +244,10 @@ async def list_users(
     sort_field = "ai_profile.business_potential.score"
     if sort_by == "stats.active_days":
         sort_field = "stats.active_days"
+    elif sort_by == "stats.total_runs":
+        sort_field = "stats.total_runs"
+    elif sort_by.startswith("payment_stats."):
+        sort_field = sort_by
     
     sort_dir = -1 if sort_order == "desc" else 1
 
@@ -338,8 +347,9 @@ async def get_stats(
                 "$group": {
                     "_id": "$ai_profile.user_subcategory",
                     "total": {"$sum": 1},
-                    "paid": {"$sum": {"$cond": [{"$eq": ["$payment_stats.is_paid_user", True]}, 1, 0]}},
-                    "intent": {"$sum": {"$cond": [{"$eq": ["$payment_stats.has_payment_intent", True]}, 1, 0]}}
+                    "paid": {"$sum": {"$cond": [{"$gt": ["$payment_stats.paid_count", 0]}, 1, 0]}},
+                    "intent": {"$sum": {"$cond": [{"$and": [{"$eq": ["$payment_stats.paid_count", 0]}, {"$gt": ["$payment_stats.unpaid_count", 0]}]}, 1, 0]}},
+                    "total_amount": {"$sum": {"$ifNull": ["$payment_stats.paid_amount", 0]}}
                 }
             }
         ]
@@ -351,8 +361,9 @@ async def get_stats(
                 "$group": {
                     "_id": "$ai_profile.user_category",
                     "total": {"$sum": 1},
-                    "paid": {"$sum": {"$cond": [{"$eq": ["$payment_stats.is_paid_user", True]}, 1, 0]}},
-                    "intent": {"$sum": {"$cond": [{"$eq": ["$payment_stats.has_payment_intent", True]}, 1, 0]}}
+                    "paid": {"$sum": {"$cond": [{"$gt": ["$payment_stats.paid_count", 0]}, 1, 0]}},
+                    "intent": {"$sum": {"$cond": [{"$and": [{"$eq": ["$payment_stats.paid_count", 0]}, {"$gt": ["$payment_stats.unpaid_count", 0]}]}, 1, 0]}},
+                    "total_amount": {"$sum": {"$ifNull": ["$payment_stats.paid_amount", 0]}}
                 }
             }
         ]
@@ -379,9 +390,20 @@ async def get_stats(
         total = item["total"]
         paid = item["paid"]
         intent = item.get("intent", 0)
+        total_amount = item.get("total_amount", 0)
+        
         rate = round((paid / total) * 100, 1) if total > 0 else 0
         intent_rate = round((intent / total) * 100, 1) if total > 0 else 0
-        payment_stats[key] = {"total": total, "paid": paid, "rate": rate, "intent": intent, "intent_rate": intent_rate}
+        avg_amount = round(total_amount / total, 2) if total > 0 else 0
+        
+        payment_stats[key] = {
+            "total": total, 
+            "paid": paid, 
+            "rate": rate, 
+            "intent": intent, 
+            "intent_rate": intent_rate,
+            "avg_amount": avg_amount
+        }
     
     high_potential = await collection.count_documents({**params_match, "ai_profile.business_potential.score": {"$gte": 7}})
     total_users = await collection.count_documents(params_match)

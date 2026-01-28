@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   Layout, Table, Tag, Space, Card, Statistic, Row, Col,
   Form, Select, Slider, Button, Drawer, Typography, Descriptions,
-  List, Badge, ConfigProvider, theme, DatePicker, Spin
+  List, Badge, ConfigProvider, theme, DatePicker, Spin, Tooltip as AntTooltip
 } from 'antd';
 import dayjs from 'dayjs';
 import {
   UserOutlined, DashboardOutlined, FilterOutlined,
   ReloadOutlined, RiseOutlined, RocketTwoTone, ArrowLeftOutlined,
-  PlayCircleTwoTone, CheckCircleTwoTone, MenuFoldOutlined, MenuUnfoldOutlined
+  PlayCircleTwoTone, CheckCircleTwoTone, MenuFoldOutlined, MenuUnfoldOutlined,
+  QuestionCircleOutlined
 } from '@ant-design/icons';
 import { getUsers, getStats, getFilters, getUser } from './services/api';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -23,6 +24,7 @@ const App = () => {
   // State
   // Global State (driven by Pie Chart)
   const [globalCategory, setGlobalCategory] = useState(null);
+  const [globalSubcategory, setGlobalSubcategory] = useState(null);
   const [dateRange, setDateRange] = useState(null);
 
   const [users, setUsers] = useState([]);
@@ -32,6 +34,9 @@ const App = () => {
   const [stats, setStats] = useState(null);
   const [filterOptions, setFilterOptions] = useState({});
   const [filters, setFilters] = useState({ page: 1, limit: 10, min_score: 1 });
+  // Pending filters for manual application
+  const [pendingFilters, setPendingFilters] = useState({ min_score: 1 });
+  const [pendingDateRange, setPendingDateRange] = useState(null);
 
   // Drawer State
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -126,7 +131,9 @@ const App = () => {
         params.end_date = dateRange[1].toISOString();
       }
       // Global category overrides form category if present (or syncs with it)
+      // Also include globalSubcategory
       if (globalCategory) params.category = globalCategory;
+      if (globalSubcategory) params.subcategory = globalSubcategory;
 
       const data = await getUsers(params);
       setUsers(data.items);
@@ -147,7 +154,9 @@ const App = () => {
       ...prev,
       page: pagination.current,
       limit: pagination.pageSize,
-      sort_by: sorter.field || 'business_potential.score',
+      limit: pagination.pageSize,
+      // Handle both string and array dataIndex for sorting
+      sort_by: sorter.columnKey || (Array.isArray(sorter.field) ? sorter.field.join('.') : sorter.field) || 'business_potential.score',
       sort_order: sorter.order === 'ascend' ? 'asc' : 'desc'
     }));
   };
@@ -172,6 +181,12 @@ const App = () => {
       dataIndex: 'user_email',
       key: 'user_email',
       render: (text) => <Text strong style={{ color: '#1890ff' }}>{text}</Text>,
+    },
+    {
+      title: 'User Category',
+      dataIndex: ['ai_profile', 'user_category'],
+      key: 'user_category',
+      render: (text) => text || 'N/A'
     },
     {
       title: 'Subcategory',
@@ -213,6 +228,62 @@ const App = () => {
       key: 'stats.active_days',
       sorter: true,
       render: (val, record) => `${val || record.stats?.active_days_30d || 0} days`
+    },
+    {
+      title: (
+        <Space>
+          Paid Orders
+          <AntTooltip title="paid 订单数量">
+            <QuestionCircleOutlined style={{ color: '#999', cursor: 'help' }} />
+          </AntTooltip>
+        </Space>
+      ),
+      dataIndex: ['payment_stats', 'paid_count'],
+      key: 'payment_stats.paid_count',
+      sorter: true,
+      render: (val) => val || 0
+    },
+    {
+      title: (
+        <Space>
+          Unpaid Orders
+          <AntTooltip title="unpaid 订单数量">
+            <QuestionCircleOutlined style={{ color: '#999', cursor: 'help' }} />
+          </AntTooltip>
+        </Space>
+      ),
+      dataIndex: ['payment_stats', 'unpaid_count'],
+      key: 'payment_stats.unpaid_count',
+      sorter: true,
+      render: (val) => val || 0
+    },
+    {
+      title: (
+        <Space>
+          Paid Amt ($)
+          <AntTooltip title="paid 订单总金额（美元）">
+            <QuestionCircleOutlined style={{ color: '#999', cursor: 'help' }} />
+          </AntTooltip>
+        </Space>
+      ),
+      dataIndex: ['payment_stats', 'paid_amount'],
+      key: 'payment_stats.paid_amount',
+      sorter: true,
+      render: (val) => val ? `$${val}` : '$0'
+    },
+    {
+      title: (
+        <Space>
+          Unpaid Amt ($)
+          <AntTooltip title="unpaid 订单总金额（美元）">
+            <QuestionCircleOutlined style={{ color: '#999', cursor: 'help' }} />
+          </AntTooltip>
+        </Space>
+      ),
+      dataIndex: ['payment_stats', 'unpaid_amount'],
+      key: 'payment_stats.unpaid_amount',
+      sorter: true,
+      render: (val) => val ? `$${val}` : '$0'
     },
     {
       title: 'Action',
@@ -291,10 +362,21 @@ const App = () => {
             <div style={{ display: collapsed ? 'none' : 'block' }}>
               <Form layout="vertical" onValuesChange={(changed, all) => {
                 if (changed.dateRange) {
-                  setDateRange(changed.dateRange);
-                  fetchStats(changed.dateRange, globalCategory);
+                  setPendingDateRange(changed.dateRange);
                 }
-                handleFilterChange(changed);
+
+                // Update pending filters
+                const newPending = { ...pendingFilters, ...all };
+                // If category changed, clear pending subcategory
+                if (changed.category) {
+                  newPending.subcategory = undefined;
+                  all.subcategory = undefined; // Update form internal state if possible, though this needs form instance usually.
+                  // Actually, for uncontrolled form, we depend on the user clearing or us forcing it.
+                  // But we can just handle it in pending state.
+                }
+                // Remove dateRange from pendingFilters as we handle it separately
+                delete newPending.dateRange;
+                setPendingFilters(newPending);
               }}>
                 <Form.Item label="Date Range" name="dateRange">
                   <RangePicker style={{ width: '100%' }} />
@@ -306,13 +388,17 @@ const App = () => {
 
                 <Form.Item label="User Category" name="category">
                   <Select allowClear placeholder="Select Category" style={{ width: '100%' }}>
-                    {filterOptions.categories?.map(c => <Option key={c} value={c}>{c}</Option>)}
+                    {filterOptions.categories?.filter(c => c !== '教育/培训').map(c => <Option key={c} value={c}>{c}</Option>)}
                   </Select>
                 </Form.Item>
 
-                <Form.Item label="Industry" name="industry">
-                  <Select allowClear placeholder="Select Industry">
-                    {filterOptions.industries?.map(i => <Option key={i} value={i}>{i}</Option>)}
+                <Form.Item label="Subcategory" name="subcategory">
+                  <Select allowClear placeholder="Select Subcategory" disabled={!pendingFilters.category} value={pendingFilters.subcategory}>
+                    {pendingFilters.category && stats.categories && stats.categories[pendingFilters.category]?.subcategories &&
+                      Object.keys(stats.categories[pendingFilters.category].subcategories).map(sc => (
+                        <Option key={sc} value={sc}>{sc}</Option>
+                      ))
+                    }
                   </Select>
                 </Form.Item>
 
@@ -328,6 +414,15 @@ const App = () => {
                   </Select>
                 </Form.Item>
               </Form>
+              <Button type="primary" block icon={<FilterOutlined />} onClick={() => {
+                // Apply Date Range
+                setDateRange(pendingDateRange);
+                fetchStats(pendingDateRange, globalCategory);
+                // Apply Filters
+                setFilters(prev => ({ ...prev, ...pendingFilters, page: 1 }));
+              }} style={{ marginTop: 16 }}>
+                Apply Filters
+              </Button>
             </div>
             {collapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, marginTop: 24 }}>
@@ -366,9 +461,10 @@ const App = () => {
                 </Row>
 
                 {/* Analytical Charts */}
+                {/* Analytical Charts */}
+                {/* Row 1: Category Pie Chart (Full Width) */}
                 <Row gutter={16} style={{ marginBottom: '24px' }}>
-                  {/* 1. Category Pie Chart (The Controller) */}
-                  <Col span={8}>
+                  <Col span={24}>
                     <Card
                       title={
                         selectedCategory ? (
@@ -379,10 +475,10 @@ const App = () => {
                         ) : "User Category Distribution"
                       }
                       extra={!selectedCategory && <Text type="secondary" style={{ fontSize: 12 }}>Click Slice to Filter</Text>}
-                      style={{ height: 400, border: globalCategory ? '2px solid #722ed1' : undefined }}
+                      style={{ height: 500, border: globalCategory ? '2px solid #722ed1' : undefined }}
                     >
                       {stats.categories ? (
-                        <ResponsiveContainer width="100%" height={330}>
+                        <ResponsiveContainer width="100%" height={430}>
                           <PieChart>
                             <Pie
                               data={
@@ -392,9 +488,9 @@ const App = () => {
                                 ).filter(item => item.name !== '教育/培训' && item.value > 0)
                               }
                               cx="50%"
-                              cy="40%"
-                              innerRadius={60}
-                              outerRadius={80}
+                              cy="50%"
+                              innerRadius={80}
+                              outerRadius={110}
                               fill="#1890ff"
                               paddingAngle={5}
                               dataKey="value"
@@ -427,12 +523,28 @@ const App = () => {
                       ) : <Text type="secondary">No category data yet.</Text>}
                     </Card>
                   </Col>
+                </Row>
+
+                {/* Row 2: 3 Charts (Conversion, Intent, Average Amount) */}
+                <Row gutter={16} style={{ marginBottom: '24px' }}>
 
                   {/* 2. Payment Rate Chart (Line) */}
                   <Col span={8}>
-                    <Card title="Payment Conversion Rate" style={{ height: 400 }}>
+                    <Card title={
+                      <Space>
+                        Payment Conversion Rate
+                        <AntTooltip title={
+                          <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
+                            <div><b>公式：</b>paid_count &gt; 0 的用户占比。</div>
+                            <div style={{ marginTop: '4px' }}><b>含义：</b>只要有成功支付过（哪怕只有1次），就算作转化成功。</div>
+                          </div>
+                        }>
+                          <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
+                        </AntTooltip>
+                      </Space>
+                    } style={{ height: 500 }}>
                       {stats.payment_stats && (
-                        <ResponsiveContainer width="100%" height={330}>
+                        <ResponsiveContainer width="100%" height={430}>
                           <LineChart
                             data={Object.entries(stats.payment_stats)
                               .map(([name, data]) => ({ name, rate: data.rate, paid: data.paid, total: data.total }))
@@ -471,9 +583,21 @@ const App = () => {
 
                   {/* 3. Payment Intent Rate Chart (Line) */}
                   <Col span={8}>
-                    <Card title="Payment Intent Rate" style={{ height: 400 }}>
+                    <Card title={
+                      <Space>
+                        Payment Intent Rate
+                        <AntTooltip title={
+                          <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
+                            <div><b>公式：</b>paid_count == 0 且 unpaid_count &gt; 0 的用户占比。</div>
+                            <div style={{ marginTop: '4px' }}><b>含义：</b>仅包含那些“尝试过但从未成功支付”的用户。</div>
+                          </div>
+                        }>
+                          <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
+                        </AntTooltip>
+                      </Space>
+                    } style={{ height: 500 }}>
                       {stats.payment_stats && (
-                        <ResponsiveContainer width="100%" height={330}>
+                        <ResponsiveContainer width="100%" height={430}>
                           <LineChart
                             data={Object.entries(stats.payment_stats)
                               .map(([name, data]) => ({ name, rate: data.intent_rate, intent: data.intent, total: data.total }))
@@ -505,6 +629,56 @@ const App = () => {
                             />
                             <Line type="monotone" dataKey="rate" stroke="#82ca9d" name="Intent Rate" strokeWidth={2} />
                           </LineChart>
+                        </ResponsiveContainer>
+                      )}
+                    </Card>
+                  </Col>
+
+                  {/* Average Payment Amount */}
+                  <Col span={8}>
+                    <Card title={
+                      <Space>
+                        Average Payment Amount
+                        <AntTooltip title={
+                          <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
+                            <div><b>公式：</b>sum(paid_amount) / total_users</div>
+                            <div style={{ marginTop: '4px' }}><b>含义：</b>该品类下所有用户的平均支付金额（包含未支付用户，计算整体价值）。</div>
+                          </div>
+                        }>
+                          <QuestionCircleOutlined style={{ color: '#999', fontSize: '14px', cursor: 'help' }} />
+                        </AntTooltip>
+                      </Space>
+                    } style={{ height: 500 }}>
+                      {stats.payment_stats && (
+                        <ResponsiveContainer width="100%" height={430}>
+                          <BarChart
+                            data={Object.entries(stats.payment_stats)
+                              .map(([name, data]) => ({ name, amount: data.avg_amount }))
+                              .filter(item => item.name !== '教育/培训')
+                              .sort((a, b) => b.amount - a.amount)
+                            }
+                            margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" style={{ fontSize: '10px' }} interval={0} angle={-45} textAnchor="end" height={60} />
+                            <YAxis unit="$" />
+                            <Tooltip
+                              cursor={{ fill: 'transparent' }}
+                              content={({ active, payload, label }) => {
+                                if (active && payload && payload.length) {
+                                  const data = payload[0].payload;
+                                  return (
+                                    <div style={{ background: '#fff', padding: 10, border: '1px solid #ccc', borderRadius: 4 }}>
+                                      <p style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</p>
+                                      <p style={{ color: '#ffc658', marginBottom: 4 }}>Avg Amount: ${data.amount}</p>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                            <Bar dataKey="amount" fill="#ffc658" name="Avg Amount" barSize={30} />
+                          </BarChart>
                         </ResponsiveContainer>
                       )}
                     </Card>
@@ -647,7 +821,7 @@ const App = () => {
                                       {displayNodeTypes.length > 5 && '...'}
                                     </Text>
                                   ) : <Text type="secondary" style={{ fontSize: 12 }}>Nodes: N/A</Text>}
-                                  <br/>
+                                  <br />
                                   {item.flow_id && <Text copyable={{ text: item.flow_id }} style={{ fontSize: 10, color: '#bfbfbf' }}>ID: {item.flow_id}</Text>}
                                 </div>
                               </Space>

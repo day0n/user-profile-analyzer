@@ -36,10 +36,10 @@ echo "Starting Backend..."
 cd "$SCRIPT_DIR/react-dashboard/backend"
 
 if command -v uv &> /dev/null; then
-    nohup uv run uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$SCRIPT_DIR/backend.log" 2>&1 &
+    nohup uv run uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$SCRIPT_DIR/logs/backend.log" 2>&1 &
 else
     echo "Warning: 'uv' not found, trying 'python3'..."
-    nohup python3 -m uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$SCRIPT_DIR/backend.log" 2>&1 &
+    nohup python3 -m uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$SCRIPT_DIR/logs/backend.log" 2>&1 &
 fi
 cd "$SCRIPT_DIR"
 
@@ -50,7 +50,7 @@ if [ ! -d "node_modules" ]; then
     echo "Installing dependencies..."
     npm install
 fi
-nohup npm run dev -- --host --port $FRONTEND_PORT > "$SCRIPT_DIR/frontend.log" 2>&1 &
+nohup npm run dev -- --host --port $FRONTEND_PORT > "$SCRIPT_DIR/logs/frontend.log" 2>&1 &
 cd "$SCRIPT_DIR"
 
 sleep 2
@@ -65,10 +65,10 @@ echo "--- Backend Log ---"
 echo ""
 
 # Show logs for 60 seconds
-timeout 60 tail -f "$SCRIPT_DIR/backend.log" "$SCRIPT_DIR/frontend.log" 2>/dev/null || true
+timeout 60 tail -f "$SCRIPT_DIR/logs/backend.log" "$SCRIPT_DIR/logs/frontend.log" 2>/dev/null || true
 
 echo ""
 echo "=================================================="
 echo "Log preview finished. Services running in background."
-echo "To view logs later: tail -f backend.log frontend.log"
+echo "To view logs later: tail -f logs/backend.log logs/frontend.log"
 echo "=================================================="
