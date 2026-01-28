@@ -74,6 +74,7 @@ const App = () => {
   }, [filters]);
 
   const loadInitData = async () => {
+    setChartsLoading(true);
     try {
       // Initial range 2025-10-01 to 2026-01-27 as requested defaults or empty
       const [s, f] = await Promise.all([getStats(), getFilters()]);
@@ -81,6 +82,8 @@ const App = () => {
       setFilterOptions(f);
     } catch (e) {
       console.error(e);
+    } finally {
+        setChartsLoading(false);
     }
   };
 
