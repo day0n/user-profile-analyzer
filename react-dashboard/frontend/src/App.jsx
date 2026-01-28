@@ -781,8 +781,8 @@ const App = () => {
                   {selectedUser.ai_profile?.content_focus?.map(t => <Tag key={t}>{t}</Tag>)}
                 </Descriptions.Item>
                 <Descriptions.Item label="Payment Status">
-                  {selectedUser.payment_stats?.is_paid_user ? <Tag color="gold">Paid User</Tag> : <Tag>Free User</Tag>}
-                  {selectedUser.payment_stats?.has_payment_intent && <Tag color="orange">Has Intent</Tag>}
+                  {selectedUser.payment_stats?.paid_count > 0 ? <Tag color="gold">Paid User</Tag> : <Tag>Free User</Tag>}
+                  {selectedUser.payment_stats?.unpaid_count > 0 && <Tag color="orange">Has Intent</Tag>}
                 </Descriptions.Item>
               </Descriptions>
 
