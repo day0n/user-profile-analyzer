@@ -131,7 +131,8 @@ class PaymentStatsUpdater:
 
             # 3. 计算付费状态
             is_paid_user = payment_stats["paid_count"] > 0
-            has_payment_intent = payment_stats["unpaid_count"] > 0
+            # Intent definition: User has NO paid records but HAS unpaid records
+            has_payment_intent = (payment_stats["paid_count"] == 0) and (payment_stats["unpaid_count"] > 0)
 
             # 4. 更新 user_workflow_profile
             update_data = {
