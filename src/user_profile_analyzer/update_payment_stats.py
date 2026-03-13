@@ -15,7 +15,7 @@
     APP_ENV=prod uv run python -m src.user_profile_analyzer.update_payment_stats
 
     # 带时间范围过滤
-    APP_ENV=prod uv run python -m src.user_profile_analyzer.update_payment_stats --start-date 2025-10-01 --end-date 2026-03-12
+    APP_ENV=prod uv run python -m src.user_profile_analyzer.update_payment_stats --start-date 2025-10-01 --end-date 2026-03-12 -c 100
 """
 
 import asyncio
@@ -47,7 +47,7 @@ def load_env():
 class PaymentStatsUpdater:
     """支付统计更新器"""
 
-    def __init__(self, start_date: datetime = None, end_date: datetime = None):
+    def __init__(self, start_date: datetime = None, end_date: datetime = None, concurrency: int = 50):
         # MongoDB 配置
         mongo_uri = os.getenv("MONGO_ATLAS_URI")
         mongo_db = os.getenv("MONGO_DB")
@@ -68,6 +68,10 @@ class PaymentStatsUpdater:
         # 时间范围
         self.start_date = start_date
         self.end_date = end_date
+
+        # 并发控制
+        self.concurrency = concurrency
+        self.semaphore = asyncio.Semaphore(concurrency)
 
         # 统计
         self.success_count = 0
@@ -136,34 +140,37 @@ class PaymentStatsUpdater:
 
         return stats
 
-    async def update_user_payment_stats(self, profile: dict) -> str:
+    async def update_user_payment_stats(self, profile: dict, pbar: tqdm) -> str:
         """更新单个用户的支付统计"""
-        user_id = profile.get("user_id")
+        async with self.semaphore:
+            user_id = profile.get("user_id")
 
-        try:
-            # 查询订单统计
-            stats = await self.get_user_order_stats(user_id)
+            try:
+                # 查询订单统计
+                stats = await self.get_user_order_stats(user_id)
 
-            # 更新 user_workflow_profile
-            await self.profile_collection.update_one(
-                {"_id": profile["_id"]},
-                {
-                    "$set": {
-                        "payment_stats": {
-                            "paid_count": stats["paid_count"],
-                            "unpaid_count": stats["unpaid_count"],
-                            "paid_amount": stats["paid_amount"],
-                            "unpaid_amount": stats["unpaid_amount"],
-                            "updated_at": datetime.now()
+                # 更新 user_workflow_profile
+                await self.profile_collection.update_one(
+                    {"_id": profile["_id"]},
+                    {
+                        "$set": {
+                            "payment_stats": {
+                                "paid_count": stats["paid_count"],
+                                "unpaid_count": stats["unpaid_count"],
+                                "paid_amount": stats["paid_amount"],
+                                "unpaid_amount": stats["unpaid_amount"],
+                                "updated_at": datetime.now()
+                            }
                         }
                     }
-                }
-            )
+                )
 
-            return "success"
+                pbar.update(1)
+                return "success"
 
-        except Exception as e:
-            return f"error: {e}"
+            except Exception as e:
+                pbar.update(1)
+                return f"error: {e}"
 
     async def run(self):
         """运行主流程"""
@@ -190,21 +197,22 @@ class PaymentStatsUpdater:
             return
 
         # 2. 更新支付统计
-        print(f"\n[2/2] 更新支付统计...")
+        print(f"\n[2/2] 并发更新支付统计...")
 
         pbar = tqdm(total=total_users, desc="更新进度")
 
-        for user in users:
-            result = await self.update_user_payment_stats(user)
+        tasks = [self.update_user_payment_stats(user, pbar) for user in users]
+        results = await asyncio.gather(*tasks)
 
+        pbar.close()
+
+        for result in results:
             if result == "success":
                 self.success_count += 1
             elif result.startswith("skip"):
                 self.skip_count += 1
             else:
                 self.error_count += 1
-
-            pbar.update(1)
 
         pbar.close()
 
@@ -237,6 +245,12 @@ async def main():
         default=None,
         help="结束日期，格式：YYYY-MM-DD"
     )
+    parser.add_argument(
+        "-c", "--concurrency",
+        type=int,
+        default=50,
+        help="并发数，默认 50"
+    )
     args = parser.parse_args()
 
     # 解析日期
@@ -252,7 +266,7 @@ async def main():
     env_file = load_env()
     print(f"使用配置文件: {env_file}")
 
-    updater = PaymentStatsUpdater(start_date=start_date, end_date=end_date)
+    updater = PaymentStatsUpdater(start_date=start_date, end_date=end_date, concurrency=args.concurrency)
     try:
         await updater.run()
     finally:
