@@ -29,6 +29,8 @@ import argparse
 import re
 import httpx
 import base64
+import time
+import sys
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path
@@ -313,7 +315,7 @@ ANALYSIS_PROMPT = """你是工作流结构分析助手，专注于理解用户�
 class AIProfileAnalyzer:
     """AI 用户画像分析器"""
 
-    def __init__(self, concurrency: int = 5):
+    def __init__(self, concurrency: int = 5, log_file: Optional[str] = None, show_progress: bool = True):
         """
         初始化分析器
 
@@ -344,6 +346,11 @@ class AIProfileAnalyzer:
 
         self.client = genai.Client(api_key=gemini_api_key)
         self.model_name = 'gemini-2.0-flash'
+        self.gemini_timeout_seconds = 180
+        self.gemini_max_retries = 3
+        self.gemini_retry_delay_seconds = 5
+        self.log_file = log_file
+        self.show_progress = show_progress
 
         # 配置 - 时间范围从2025年10月1日到2026年3月12日
         self.start_date = datetime(2025, 10, 1)
@@ -358,6 +365,11 @@ class AIProfileAnalyzer:
         self.error_count = 0
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+
+    def _log(self, message: str):
+        """输出带时间戳的日志，便于定位卡点。"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{timestamp}] {message}")
 
     async def get_users_to_analyze(self, specific_email: Optional[str] = None, force: bool = False) -> List[Dict]:
         """获取需要分析的用户列表
@@ -766,7 +778,8 @@ class AIProfileAnalyzer:
         self,
         prompt: str,
         image_urls: List[str],
-        video_urls: List[str]
+        video_urls: List[str],
+        request_label: str
     ) -> Optional[Dict]:
         """
         调用 Gemini API 进行多模态分析
@@ -804,36 +817,79 @@ class AIProfileAnalyzer:
             # 视频暂时只在 prompt 中说明数量，不实际传递
             # （Gemini 对视频 URL 的支持有限）
 
-            # 调用 API
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
-                model=self.model_name,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    temperature=0.3,
-                    max_output_tokens=64000,
+            for attempt in range(1, self.gemini_max_retries + 1):
+                started_at = time.perf_counter()
+                self._log(
+                    f"[Gemini] 开始请求 attempt={attempt}/{self.gemini_max_retries} "
+                    f"user={request_label} images={len(image_urls)} videos={len(video_urls)} "
+                    f"timeout={self.gemini_timeout_seconds}s"
                 )
-            )
 
-            # 记录 token 使用
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                self.total_input_tokens += response.usage_metadata.prompt_token_count or 0
-                self.total_output_tokens += response.usage_metadata.candidates_token_count or 0
+                try:
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self.client.models.generate_content,
+                            model=self.model_name,
+                            contents=contents,
+                            config=types.GenerateContentConfig(
+                                temperature=0.3,
+                                max_output_tokens=64000,
+                            )
+                        ),
+                        timeout=self.gemini_timeout_seconds
+                    )
 
-            # 解析 JSON 响应
-            response_text = response.text.strip()
+                    elapsed = time.perf_counter() - started_at
+                    self._log(
+                        f"[Gemini] 请求成功 attempt={attempt}/{self.gemini_max_retries} "
+                        f"user={request_label} elapsed={elapsed:.1f}s"
+                    )
 
-            # 尝试提取 JSON（可能被 markdown 包裹）
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
-            if json_match:
-                response_text = json_match.group(1)
+                    # 记录 token 使用
+                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                        self.total_input_tokens += response.usage_metadata.prompt_token_count or 0
+                        self.total_output_tokens += response.usage_metadata.candidates_token_count or 0
 
-            return json.loads(response_text)
+                    # 解析 JSON 响应
+                    response_text = response.text.strip()
 
-        except json.JSONDecodeError as e:
-            print(f"      JSON 解析失败: {e}")
-            print(f"      原始响应: {response_text[:500]}...")
+                    # 尝试提取 JSON（可能被 markdown 包裹）
+                    json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+                    if json_match:
+                        response_text = json_match.group(1)
+
+                    return json.loads(response_text)
+
+                except asyncio.TimeoutError:
+                    elapsed = time.perf_counter() - started_at
+                    self._log(
+                        f"[Gemini] 请求超时 attempt={attempt}/{self.gemini_max_retries} "
+                        f"user={request_label} elapsed={elapsed:.1f}s timeout={self.gemini_timeout_seconds}s"
+                    )
+                except json.JSONDecodeError as e:
+                    elapsed = time.perf_counter() - started_at
+                    self._log(
+                        f"[Gemini] JSON 解析失败 attempt={attempt}/{self.gemini_max_retries} "
+                        f"user={request_label} elapsed={elapsed:.1f}s error={e}"
+                    )
+                    self._log(f"[Gemini] 原始响应 user={request_label}: {response_text[:500]}...")
+                except Exception as e:
+                    elapsed = time.perf_counter() - started_at
+                    self._log(
+                        f"[Gemini] 请求失败 attempt={attempt}/{self.gemini_max_retries} "
+                        f"user={request_label} elapsed={elapsed:.1f}s error={e}"
+                    )
+
+                if attempt < self.gemini_max_retries:
+                    self._log(
+                        f"[Gemini] {self.gemini_retry_delay_seconds} 秒后重试 "
+                        f"user={request_label} next_attempt={attempt + 1}"
+                    )
+                    await asyncio.sleep(self.gemini_retry_delay_seconds)
+
+            self._log(f"[Gemini] 达到最大重试次数，放弃请求 user={request_label}")
             return None
+
         except Exception as e:
             print(f"      Gemini API 调用失败: {e}")
             return None
@@ -909,7 +965,8 @@ class AIProfileAnalyzer:
                 result = await self._call_gemini_with_media(
                     prompt,
                     all_images[:200],  # 限制总图片数
-                    all_videos[:100]   # 限制总视频数
+                    all_videos[:100],  # 限制总视频数
+                    request_label=user_email
                 )
 
                 if not result:
@@ -974,9 +1031,9 @@ class AIProfileAnalyzer:
         tasks = [self.analyze_user(user) for user in users]
 
         results = []
-        pbar = tqdm(total=len(tasks), desc="分析进度")
+        pbar = tqdm(total=len(tasks), desc="分析进度", disable=not self.show_progress)
 
-        for coro in asyncio.as_completed(tasks):
+        for index, coro in enumerate(asyncio.as_completed(tasks), 1):
             result = await coro
             results.append(result)
 
@@ -987,6 +1044,14 @@ class AIProfileAnalyzer:
                 'cost': f'${(self.total_input_tokens * 0.50 + self.total_output_tokens * 3.00) / 1_000_000:.4f}'
             })
             pbar.update(1)
+
+            if not self.show_progress:
+                self._log(
+                    f"[Progress] completed={index}/{len(tasks)} "
+                    f"input_tokens={self.total_input_tokens:,} "
+                    f"output_tokens={self.total_output_tokens:,} "
+                    f"cost=${(self.total_input_tokens * 0.50 + self.total_output_tokens * 3.00) / 1_000_000:.4f}"
+                )
 
         pbar.close()
 
@@ -1022,6 +1087,24 @@ class AIProfileAnalyzer:
 
 
 async def main():
+    class TeeStream:
+        """将 stdout/stderr 同时写到终端和日志文件。"""
+
+        def __init__(self, *streams):
+            self.streams = streams
+
+        def write(self, data):
+            for stream in self.streams:
+                stream.write(data)
+                stream.flush()
+
+        def flush(self):
+            for stream in self.streams:
+                stream.flush()
+
+        def isatty(self):
+            return any(getattr(stream, "isatty", lambda: False)() for stream in self.streams)
+
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="AI 用户画像分析器")
     parser.add_argument(
@@ -1041,17 +1124,49 @@ async def main():
         action="store_true",
         help="强制重新分析所有用户（覆盖已有画像）"
     )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="日志文件路径，未指定时自动写入 logs/analyze_profile_YYYYMMDD_HHMMSS.log"
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="禁用 tqdm 进度条，改为普通日志输出"
+    )
     args = parser.parse_args()
 
     # 加载环境变量
     env_file = load_env()
-    print(f"使用配置文件: {env_file}")
+    log_dir = Path(__file__).resolve().parent.parent.parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = Path(args.log_file) if args.log_file else log_dir / f"analyze_profile_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    if not log_file.is_absolute():
+        log_file = Path.cwd() / log_file
+    log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    analyzer = AIProfileAnalyzer(concurrency=args.concurrency)
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    log_fp = open(log_file, "a", encoding="utf-8", buffering=1)
+    sys.stdout = TeeStream(original_stdout, log_fp)
+    sys.stderr = TeeStream(original_stderr, log_fp)
+
+    print(f"使用配置文件: {env_file}")
+    print(f"日志文件: {log_file}")
+
+    analyzer = AIProfileAnalyzer(
+        concurrency=args.concurrency,
+        log_file=str(log_file),
+        show_progress=not args.no_progress
+    )
     try:
         await analyzer.run(specific_email=args.email, force=args.force)
     finally:
         await analyzer.close()
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
+        log_fp.close()
 
 
 if __name__ == "__main__":
