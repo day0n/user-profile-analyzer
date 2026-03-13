@@ -77,9 +77,9 @@ class UserWorkflowProfileGenerator:
         self.user_collection = self.db["user"]
         self.profile_collection = self.db["user_workflow_profile"]
 
-        # 配置 - 时间范围：2025年10月1日 - 2026年1月27日
+        # 配置 - 时间范围：2025年10月1日 - 2026年3月12日
         self.start_date = datetime(2025, 10, 1)
-        self.end_date = datetime(2026, 1, 27, 23, 59, 59)
+        self.end_date = datetime(2026, 3, 12, 23, 59, 59)
         self.top_n = 15  # Top 15 工作流
         self.concurrency = concurrency  # 并发数
         self.semaphore = asyncio.Semaphore(concurrency)
@@ -344,7 +344,7 @@ class UserWorkflowProfileGenerator:
             "stats": {
                 "total_runs": len(flow_tasks),
                 "active_days": active_days,
-                "period": "2025-10-01 ~ 2026-01-27"
+                "period": "2025-10-01 ~ 2026-03-12"
             },
             "top_workflows": top_workflows,
             "ai_profile": None,  # 后续 AI 分析填充

@@ -15,7 +15,7 @@
     APP_ENV=prod uv run python -m src.user_profile_analyzer.update_payment_stats
 
     # 带时间范围过滤
-    APP_ENV=prod uv run python -m src.user_profile_analyzer.update_payment_stats --start-date 2025-10-01 --end-date 2026-01-27
+    APP_ENV=prod uv run python -m src.user_profile_analyzer.update_payment_stats --start-date 2025-10-01 --end-date 2026-03-12
 """
 
 import asyncio

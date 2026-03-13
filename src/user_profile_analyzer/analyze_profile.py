@@ -59,7 +59,7 @@ def load_env():
 ANALYSIS_PROMPT = """你是工作流结构分析助手，专注于理解用户的真实使用意图和商业价值。请分析以下用户在AI创作平台上运行的工作流拓扑结构，判断每个工作流的目的，并对用户进行精准分类。
 
 ## 用户基本信息
-- 统计周期：2025年10月1日 - 2026年1月27日
+- 统计周期：2025年10月1日 - 2026年3月12日
 - 总运行次数：{total_runs}
 - 活跃天数：{active_days}
 
@@ -345,9 +345,9 @@ class AIProfileAnalyzer:
         self.client = genai.Client(api_key=gemini_api_key)
         self.model_name = 'gemini-2.0-flash'
 
-        # 配置 - 时间范围从2025年10月1日到2026年1月27日
+        # 配置 - 时间范围从2025年10月1日到2026年3月12日
         self.start_date = datetime(2025, 10, 1)
-        self.end_date = datetime(2026, 1, 27, 23, 59, 59)
+        self.end_date = datetime(2026, 3, 12, 23, 59, 59)
         self.top_n = 10  # Top 10 工作流
         self.concurrency = concurrency
         self.semaphore = asyncio.Semaphore(concurrency)
